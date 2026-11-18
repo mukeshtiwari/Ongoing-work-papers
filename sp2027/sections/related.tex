@@ -4,20 +4,21 @@ ranked tallies.
 
 \begin{table}[t]
   \caption{Verifiable ranked tallies. ``Public'' and ``talliers'' are what
-  each party learns beyond the winner; ``paths'' are the witness paths
-  of our certificate (Section~\ref{sec:security}).}
+  each party learns beyond the winner: ``counts'' is the pairwise count
+  matrix $D$, and ``paths'' are the witness paths of our certificate
+  (Section~\ref{sec:security}).}
   \label{tab:comparison}
   \centering\scriptsize\setlength{\tabcolsep}{2.5pt}
-  \begin{tabularx}{\columnwidth}{@{}lllll>{\raggedright\arraybackslash}X@{}}
+  \begin{tabularx}{\columnwidth}{@{}llll>{\raggedright\arraybackslash}X@{}}
     \toprule
-    System & Public & Talliers & Proofs & Schulze & Machine-checked \\
+    System & Public & Talliers & Proofs & Machine-checked \\
     \midrule
-    VSTTE'19~\cite{haines2019verifiable} & counts & counts & $\Sigma$ & yes & tally; crypto axiomatised \\
-    VERICONDOR~\cite{vericondor2024} & counts & --- & $\Sigma$ & on counts & no \\
-    Ordinos ext.~\cite{ordinos2020,ordinosext2021} & winner & nothing & MPC & yes & no \\
-    Cortier et al.~\cite{cgy2022,yang2023thesis} & winner & nothing & MPC & yes, ties & UC proof of CGate \\
-    Kryvos~\cite{kryvos2022} & winner & tally & SNARK & Condorcet & no \\
-    this paper & winner, paths & counts & $\Sigma$ & yes, ties & ballot and certificate soundness, ZK \\
+    VSTTE'19~\cite{haines2019verifiable} & counts & counts & $\Sigma$ & tally; crypto axiomatised \\
+    VERICONDOR~\cite{vericondor2024} & counts & --- & $\Sigma$ & no \\
+    Ordinos ext.~\cite{ordinos2020,ordinosext2021} & winner & nothing & MPC & no \\
+    Cortier et al.~\cite{cgy2022,yang2023thesis} & winner & nothing & MPC & UC proof of CGate \\
+    Kryvos~\cite{kryvos2022} & winner & counts & SNARK & no \\
+    this paper & winner, paths & counts & $\Sigma$ & ballot and certificate soundness, ZK \\
     \bottomrule
   \end{tabularx}
 \end{table}
@@ -36,8 +37,8 @@ variants reveal the matrix. Both MPC-based systems hide more than we do:
 even the talliers learn only the winner. In exchange, their talliers
 interact throughout the tally. Ours interact only to decrypt the counts,
 and anyone can check the certificate alone.
-Appendix~\ref{app:cortier} compares our running times with those of
-Cortier et al., with the caveats this difference brings.
+Appendix~\ref{app:cortier} compares our running times with those
+of~\cite{cgy2022}, with the caveats this difference brings.
 
 Kryvos~\cite{kryvos2022} defines
 \emph{publicly} tally-hiding elections, where the talliers learn the tally
