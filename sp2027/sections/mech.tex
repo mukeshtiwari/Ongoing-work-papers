@@ -68,24 +68,24 @@ the batched ballot itself:
   \rocqfile[Backend/SchulzeSimpleTally.v]{src/Backend/SchulzeSimpleTally.v}).
 \end{itemize}
 
-Listing~\ref{lst:ballot-sound} shows \rocq{ballot_sound}. It
-concludes with a position vector $s$, $s_i \le m$, such that every pair
-ciphertext has plaintext $g^{[s_i < s_j]}$: whatever the voter's device
-did, the bits of an accepted ballot are the bits of one ranking. The hypotheses are the key relation $h = g^x$, the
-two transcripts, and two side conditions that the library's generic
-statements cannot discharge: \rocq{exp_injective}~\texttt{g}, that $g$ has order
-$q$ so that $g^a = g^b$ implies $a = b$ in $\mathbb{Z}_q$, and
-\rocq{natF_injective}~\texttt{(4m+2)}, that the field has characteristic above
-$4m+2$ so that the small integers of the membership proofs are distinct
-field elements. \rocq{verify_tally_sound} has the same shape for the
-certificate, with the bound $2N^2 + 3N$. It is proved by running the
-library's extractors (\rocq{generalised_or_sigma_soundness_main} and
-the decryption-proof extractor) on every proof of the certificate and
-decoding the extracted plaintexts through the decryption homomorphism.
-\rocq{schulze_end_to_end} composes the two with
-\rocq{cdec_aggregate}, which says that the plaintext of the aggregate
-is the sum of the ballots' bits, and with the lemma of
-Section~\ref{sec:tally}.
+Listing~\ref{lst:ballot-sound} shows \rocq{ballot_sound}. Whatever the
+voter's device did, the bits of an accepted ballot are the bits of one
+ranking $s$ with every $s_i \le m$. Its hypotheses are the key relation $h = g^x$, the two
+transcripts, and two side conditions that the generic development cannot
+prove, because they depend on the concrete group. The first,
+\rocq{exp_injective}~\texttt{g}, says that $g$ has order $q$, so that
+$g^a = g^b$ implies $a = b$ in $\mathbb{Z}_q$. The second,
+\rocq{natF_injective}~\texttt{(4m+2)}, says that the field has
+characteristic above $4m+2$, so that the small integers in the
+membership proofs are distinct field elements.
+\rocq{verify_tally_sound} has the same shape for the certificate, with
+the bound $2N^2 + 3N$. Its proof runs the library's extractors
+(\rocq{generalised_or_sigma_soundness_main} and the decryption-proof
+extractor) on every proof of the certificate, and then decodes the
+extracted plaintexts, using that decryption is a homomorphism.
+\rocq{schulze_end_to_end} combines the two theorems with
+\rocq{cdec_aggregate}, which says that the aggregate encrypts the sum of
+the ballots' bits, and with the lemma of Section~\ref{sec:tally}.
 
 \begin{lstlisting}[frame=single, language=Coq, caption={Ballot soundness ({\rocq[\texttt{Frontend/Schulze.v}]{ballot_sound}})},
   label={lst:ballot-sound},captionpos=t, basicstyle=\ttfamily\scriptsize,
@@ -105,42 +105,48 @@ Theorem ballot_sound : forall (n : nat) (x : F) (g h : G)
            then one else zero)).
 \end{lstlisting}
 
-Both side conditions are facts about the Schnorr group, proved once in
-\rocqfile[Utility/SchnorrOrder.v]{src/Utility/SchnorrOrder.v}: every
-element other than $1$ of $\{v : v^q = 1 \bmod p\}$ has order $q$ for
-prime $q$ (\rocq{prime_order}, by Bezout), so exponentiation with it is
-injective (\rocq{pow_injective}), and $\mathbb{Z}_q$ has characteristic
-$q$ (\rocq{natF_injective_below_q}). The instance then only checks $g
-\ne 1$ and the bound, so \rocq{ballot_sound_ins},
+For the Schnorr group, both side conditions are proved once, in
+\rocqfile[Utility/SchnorrOrder.v]{src/Utility/SchnorrOrder.v}. Every
+element other than $1$ of $\{v : v^q = 1 \bmod p\}$ has order $q$ when
+$q$ is prime (\rocq{prime_order}, by Bezout), so exponentiation with it
+is injective (\rocq{pow_injective}). And $\mathbb{Z}_q$ has
+characteristic $q$ (\rocq{natF_injective_below_q}). The instance then
+only has to check $g \ne 1$ and the bound. So \rocq{ballot_sound_ins},
 \rocq{schulze_end_to_end_ins}, and \rocq{count_sound_ins} have no
 hypothesis beyond the transcripts.
 
-The zero-knowledge theorems \rocq{ballot_zk} and \rocq{tally_zk} have
+The zero-knowledge theorems \rocq{ballot_zk} and \rocq{tally_zk} are in
 the permutation form of Section~\ref{schn_proof}, with the simulators of
-Section~\ref{sec:security}. Their proofs lift the library's per-protocol
-simulators through the product distributions of the $m + 2m^2$ (resp.\
-$O(m^3)$) proofs. The ballot simulator computes the $\delta$ ciphertexts
-from the position ciphertexts as the verifier does.
+Section~\ref{sec:security}. A ballot consists of $m + 2m^2$ proofs and
+a certificate of $O(m^3)$, each with its own randomness. The theorems
+combine the library's simulators, one per proof, into a simulator for
+the whole transcript.
+The ballot simulator computes the $\delta$ ciphertexts from the position
+ciphertexts, as the verifier does.
 
-Tallying is an inductive judgement, in the style of the evidence-carrying
-counters of~\cite{10.1007/978-3-319-66107-0_26} and of the
-\texttt{ECount} judgement of Haines et al.~\cite{haines2019verifiable}: \rocq{count}~\texttt{:~state -> Type} with rules
-\rocq{ax}, \rocq{cvalid}, \rocq{cinvalid}, and \rocq{finish},
-each carrying the invariant that the ballots seen are a permutation of
-the accepted and the rejected ones. \rocq{compute_final_count} builds
-a derivation for any list of ballots, so the extracted verifier returns
-its verdict with the evidence. \rocq{count_sound} says that a
-derivation ending in a true verdict, with rewinding transcripts, names a
-Schulze winner of the rankings cast. We do not verify the honest
-trustees' closure algorithm. \rocq{cert_ok_b} checks its plaintext
+The count is defined by rules (an inductive judgement), in the style of
+the evidence-carrying counters of~\cite{10.1007/978-3-319-66107-0_26}
+and of the \texttt{ECount} judgement of Haines et
+al.~\cite{haines2019verifiable}. The judgement
+\rocq{count}~\texttt{:~state -> Type} has four rules: \rocq{ax} starts
+with no ballots, \rocq{cvalid} accepts a ballot, \rocq{cinvalid} rejects
+one, and \rocq{finish} checks the certificate and gives the verdict.
+Every rule keeps the invariant that the ballots seen are exactly the
+accepted and the rejected ones, in some order.
+\rocq{compute_final_count} builds a derivation for any list of ballots,
+so the extracted verifier returns its verdict together with the
+evidence. \rocq{count_sound} says that a derivation that ends in a true
+verdict, with rewinding transcripts, names a Schulze winner of the
+rankings cast. We do not verify the closure algorithm of the honest
+trustees. This is safe: \rocq{cert_ok_b} checks its plaintext
 certificate before publication, and \rocq{verify_tally_sound} does not
 depend on how a certificate was made.
 
 The voter's client (\rocq{nizk_encrypt_ballot}), the verifier
 (\rocq{nizk_verify_ballot}, \rocq{compute_final_count}), and the
-trustees' prover (\rocq{nizk_generate_tally}) are extracted to OCaml
-with the Fiat--Shamir hash (SHAKE-256) and the randomness as parameters
-(Section~\ref{schn_proof}). The example program
+trustees' prover (\rocq{nizk_generate_tally}) are extracted to OCaml.
+The Fiat--Shamir hash (SHAKE-256) and the randomness are parameters of
+the extracted code (Section~\ref{schn_proof}). The example program
 (\rocqfile[Executable/Schulzecode]{src/Executable/Schulzecode}) prints the bulletin board of the
 running example and walks the \rocq{count} derivation ballot by ballot.
 The benchmark program (\rocqfile[Executable/SchulzeBenchcode]{src/Executable/SchulzeBenchcode}) runs the same

@@ -1,20 +1,19 @@
 \section{Evaluation}\label{sec:eval}
-A script of the artefact, named in each table caption, produces every
-number in this section. All measurements are single-threaded on an
-Apple M5 Max laptop (48\,GB RAM) with the extracted OCaml code compiled
-by OCaml 5.4.1, arbitrary-precision arithmetic through
-\texttt{zarith} (GMP), and SHAKE-256 from HACL$^*$ as the Fiat--Shamir
-hash.
+Scripts in the artefact produce every number in this section. All
+measurements are single-threaded, on an Apple M5 Max laptop with
+48\,GB of RAM. The extracted OCaml code is compiled with OCaml 5.4.1. It
+uses \texttt{zarith} (GMP) for big-number arithmetic and SHAKE-256 from
+HACL$^*$ as the Fiat--Shamir hash.
 
 
 \subsection{Ballot cost}\label{sec:eval:ballot}
-A ballot for $m$ candidates has $m + m^2$ ciphertexts and $m + 2m^2$
-proofs (Section~\ref{sec:ballot}): $2m(m+2)(2m+1)$ group elements and
-$m(2m+3) + m^2(4m+8)$ field elements in all, i.e.\ $512\,(m+2)(2m+1)m +
-32\,(4m^3 + 10m^2 + 3m)$ bytes at the 2048-bit Helios parameters.
-Table~\ref{tab:ballotcost} lists the sizes for $m$ in the range of the
-Gentoo elections, with the proving and verification times of the
-extracted OCaml.
+The first ballot for $m$ candidates has $m + m^2$ ciphertexts and $m +
+2m^2$ proofs (Section~\ref{sec:ballot}). In all, that is
+$2m(m+2)(2m+1)$ group elements and $m(2m+3) + m^2(4m+8)$ field elements,
+or $512\,(m+2)(2m+1)m + 32\,(4m^3 + 10m^2 + 3m)$ bytes at the 2048-bit
+Helios parameters. Table~\ref{tab:ballotcost} lists the sizes of both
+ballots for $m$ in the range of the Gentoo elections, with the proving
+and verification times of the extracted OCaml code.
 
 \begin{table}[t]
   \caption{Ballot size and time at the 2048-bit Helios parameters.}
@@ -67,8 +66,8 @@ $3$--$4$\,ms.
 We ran the thirteen Gentoo council elections through the extracted code,
 starting from the published rankings
 (\rocqfile[Executable/SchulzeGentoocode]{src/Executable/SchulzeGentoocode}).
-Each voter's client encrypts the ballot under a credential-bound oracle
-and posts it to the board. The verifier checks every ballot and
+Each voter's client encrypts the ballot, with a Fiat--Shamir hash bound
+to the voter's credential, and posts it to the board. The verifier checks every ballot and
 aggregates, the trustees decrypt the counts and certify the winner, and
 the verifier checks the certificate. As a replay test, the verifier also
 resubmits the first ballot under another credential. We ran every
@@ -80,10 +79,10 @@ In every election every ballot is accepted, the replayed ballot is
 rejected, the certificate verifies, and the certified winner is the
 Schulze winner of the published rankings, which is Gentoo's.
 Table~\ref{tab:gentoo} gives the times. With the first ballot, proving
-takes $26$--$132$\,s and verifying $12$--$57$\,s per ballot; the batched
+takes $26$--$132$\,s and verifying $12$--$57$\,s per ballot. The batched
 ballot proves in $0.8$--$2.9$\,s and verifies in $0.5$--$1.6$\,s. The
-certificate is the same for both ballots and then dominates the cost:
-the trustees take $18$ minutes at $(m, N) = (10, 50)$ and $144$ minutes
+certificate is the same for both ballots, and with the batched ballot it
+is most of the cost: the trustees take $18$ minutes at $(m, N) = (10, 50)$ and $144$ minutes
 at $(17, 96)$, and the verifier about half of that. The elections ran
 concurrently on a shared $18$-core laptop, so the certificate times are
 wall-clock upper bounds, except for 2013, 2015, and 2023, which we re-ran
@@ -118,11 +117,11 @@ with processor-time measurement.
 \end{table}
 
 \subsection{The library as a test oracle}\label{sec:eval:oracle}
-The certified prover takes its randomness and witness as inputs, so it
-can produce proofs of false statements with correctly derived Fiat--Shamir
-challenges. On 1{,}715 honest, mutated, structural, and forged boards,
-Belenios's audit tool (\texttt{belenios-tool election verify}, release
-3.2.0) accepted 36 forged boards, each with one invalid ballot, and
-reported ``all checks passed'', because one line discarded the per-ballot check
-results. The maintainers fixed it the day after our report. Their web server
-was unaffected. 
+The certified prover takes its randomness and its witness as inputs, so
+it can also produce proofs of false statements with correctly derived
+Fiat--Shamir challenges. On 1{,}715 honest, mutated, structural, and
+forged boards, Belenios's audit tool (\texttt{belenios-tool election
+verify}, release 3.2.0) accepted 36 forged boards, each with one invalid
+ballot, and reported ``all checks passed''. The cause was one line that
+discarded the results of the per-ballot checks. The maintainers fixed it
+the day after our report. Their web server was not affected. 

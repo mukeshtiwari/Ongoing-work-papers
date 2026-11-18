@@ -1,13 +1,13 @@
 \section{Conclusion}\label{sec:conclusion}
 A ranked election can be verifiable without publishing its ballots or
-its pairwise counts, using only $\Sigma$-protocols. Anchoring the pairwise bits
-to a position vector makes ballot validity a conjunction of proofs, and
-certifying the strongest-path matrix as a closure turns the Schulze
-winner into $O(m^3)$ proofs over committed values. The only cleartext
-besides the winner is the witness paths, which reveal some defeat
-directions and no margin. Because the library already proves results
-about each step, ballot and certificate soundness are machine-checked on
-top of it, and the extracted code certified Gentoo's winner in all
-thirteen council elections. Batching the
-certificate as we batched the ballot, and certifying the closure without
-witness paths, are the next steps.
+its pairwise counts, using only $\Sigma$-protocols. Anchoring the
+pairwise bits to a position vector lets each ballot be checked on its
+own, with membership proofs. Proving that the
+strongest-path matrix is a closure turns the Schulze winner into
+$O(m^3)$ proofs over encrypted values. The only cleartext besides the
+winner is the witness paths, which reveal the direction of some defeats
+and no margin. Every proof comes from the certified library, so ballot
+and certificate soundness are machine-checked on top of it, and the
+extracted code certified Gentoo's winner in all thirteen council
+elections. The next steps are to batch the certificate as we batched the
+ballot, and to certify the closure without witness paths.

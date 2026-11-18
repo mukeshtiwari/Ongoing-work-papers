@@ -1,94 +1,91 @@
 \section{Introduction}\label{sec:intro}
-In a ranked-choice election with $m$ candidates there are $m!$ rankings
-(more with ties), so in an electorate of a few hundred a published ballot
-is often unique and names its voter. A coercer exploits this in the
-\emph{Italian attack}: they prescribe a distinctive ranking and check for
-it on the board. Publishing the pairwise counts instead of the
-ballots does not close the leak.  
-In India, the votes of every polling station are counted
-and published separately, so the result says how each village voted. In
+In a ranked-choice election with $m$ candidates there are $m!$ possible
+rankings, and more if ties are allowed. With a few hundred voters, a
+published ballot is therefore often unique, and a unique ballot
+identifies its voter. A coercer uses this in the \emph{Italian attack}:
+they tell a voter to cast one unusual ranking and then look for it on the
+board. Publishing the pairwise counts instead of the ballots does not
+stop the leak. In India, the votes of every polling station are counted
+and published separately, so the result shows how each village voted. In
 the 2019 general election a Union minister told voters that villages
-would be graded A to D by the share of their votes her party received,
-and that development work would be allotted by grade~\cite{sabrang2019}.
-The Law Commission of India had recommended in 2015 that the votes of
-several stations be mixed in a totaliser before counting, so that no
-station-level pattern is revealed~\cite{lawcom255}; the recommendation is
-before the Supreme Court of India at the time of
-writing~\cite{totaliser2026}. The finer the published result, the more
-precisely a coercer can check how a group of voters behaved, and the
-pairwise counts of a small ranked election are fine enough to check a
-single voter. 
+would be graded A to D by the share of votes they gave her party, and
+that development work would follow the grades~\cite{sabrang2019}. In 2015
+the Law Commission of India recommended mixing the votes of several
+stations in a totaliser before counting, so that no station-level pattern
+shows~\cite{lawcom255}. The recommendation is before the Supreme Court of
+India at the time of writing~\cite{totaliser2026}. The finer the
+published result, the more exactly a coercer can check how a group of
+voters behaved. The pairwise counts of a small ranked election are fine
+enough to check a single voter.
 Every verifiable Schulze tally published so far reveals one or the other:
 the shuffled ballots~\cite{haines2019verifiable} or the aggregate
 matrix~\cite{vericondor2024}. The tally-hiding systems that reveal neither
-use multi-party computation over threshold encryption, at a cost of hours
+use multi-party computation over threshold encryption, which takes hours
 to days for twenty candidates~\cite{ordinosext2021,cgy2022}, or SNARKs
 with a trusted setup~\cite{kryvos2022}.
 
 We present a verifiable Schulze election that publishes neither the
-ballots nor the pairwise counts and is built entirely from $\Sigma$-protocols, without MPC,
-SNARKs, shuffles, or a trusted setup. A ballot is a matrix of encrypted
-pairwise bits anchored to an encrypted position vector, so its
-well-formedness is a conjunction of membership proofs on ciphertexts that
-the verifier derives itself. The pairwise counts are aggregated homomorphically
-and never decrypted on the board. The trustees certify the winner over
-committed counts with a zero-knowledge certificate that the
-strongest-path matrix is the closure of the defeat matrix. The
-certificate has $O(m^3)$ proofs, a number that does not depend on the
-electorate. In the terminology
-of Kryvos~\cite{kryvos2022} the scheme is \emph{publicly} tally-hiding if
-the trustees learn the pairwise counts. The public learns the winner and
-the certificate's witness paths but no margin. 
+ballots nor the pairwise counts. It uses only $\Sigma$-protocols: no MPC,
+no SNARKs, no shuffles, and no trusted setup. A ballot is a matrix of
+encrypted pairwise bits, tied to an encrypted position vector that holds
+the voter's ranking. The voter proves the ballot well formed with
+membership proofs on ciphertexts that the verifier computes itself. The
+pairwise counts are added up under encryption and never decrypted on the
+board. The trustees then prove the winner correct with a zero-knowledge
+certificate, which shows that the strongest-path matrix is the closure
+of the defeat matrix (Section~\ref{sec:bg:schulze}). The certificate has
+$O(m^3)$ proofs, a number that does not depend on the electorate. In the
+terminology of Kryvos~\cite{kryvos2022} the scheme is \emph{publicly}
+tally-hiding: the trustees learn the pairwise counts, and the public
+learns the winner and the certificate's witness paths, but no margin.
 
-Every proof the scheme uses comes from a certified library of
-$\Sigma$-protocols in the Rocq theorem prover. The scheme's two
-central properties are machine-checked on top of the library's theorems:
-an accepted ballot encrypts a single ranking, and an accepted certificate
-names a Schulze winner of the encrypted ballots. Because Rocq is a
-constructive theorem prover, the client, the verifier, and the trustees'
-prover are extracted from these proofs as executable code. The same
-library, instantiated at Belenios's parameters, is a test oracle for
-Belenios's verifier. It showed that an audit tool reported ``all checks
-passed'' on an election containing an invalid ballot
-(Section~\ref{sec:eval:oracle}).
+Every proof in the scheme comes from a certified library of
+$\Sigma$-protocols in the Rocq theorem prover. On top of the library's
+theorems we machine-check the scheme's two central properties: an
+accepted ballot encrypts a single ranking, and an accepted certificate
+names a Schulze winner of the encrypted ballots. Rocq is a constructive
+theorem prover, so we extract the client, the verifier, and the trustees'
+prover from these proofs as executable code. The same library, set up
+with Belenios's parameters, is a test oracle for Belenios's verifier. It
+showed that an audit tool reported ``all checks passed'' on an election
+containing an invalid ballot (Section~\ref{sec:eval:oracle}).
 
 \subsection{Contributions}
 \begin{enumerate}
   \item \textbf{A publicly tally-hiding Schulze election from
   $\Sigma$-protocols alone} (Section~\ref{sec:schulze}). Ballots are
-  encrypted pairwise bits anchored to an encrypted position vector, so
-  well-formedness is a conjunction of membership proofs and needs no
-  shuffle. Pairwise counts are aggregated homomorphically and never decrypted on
-  the board, and the winner is certified over committed counts by a
-  zero-knowledge closure certificate of $O(m^3)$ proofs, a number that
-  does not depend on the electorate. It needs no trusted setup,
-  where Kryvos needs Groth16. It certifies a $10$-candidate, $50$-voter
-  election in $18$ minutes (verification $9$ minutes) and a
+  encrypted pairwise bits tied to an encrypted position vector, the
+  counts are added up under encryption, and the winner is proved correct
+  by a zero-knowledge certificate of $O(m^3)$ proofs, a number that does
+  not depend on the electorate. The scheme needs no shuffle and no
+  trusted setup, where Kryvos needs Groth16. It certifies a $10$-candidate,
+  $50$-voter election in $18$ minutes (verification $9$ minutes) and a
   $17$-candidate, $96$-voter one in $2.4$ hours (verification $71$
-  minutes). MPC-based tally-hiding Schulze takes hours for twenty
-  candidates and $1024$ voters~\cite{cgy2022} or days for twenty
-  candidates~\cite{ordinosext2021}.
+  minutes). For twenty candidates, MPC-based tally-hiding Schulze takes
+  about $9$ hours with $1024$ voters~\cite{cgy2022}, or more than $9$
+  days~\cite{ordinosext2021}.
   \item \textbf{Machine-checked ballot and certificate soundness}
-  (Section~\ref{sec:mech}). \rocq{ballot_sound}: an accepted ballot
-  encrypts a single ranking. \rocq{verify_tally_sound}: an accepted
-  certificate names a Schulze winner of the encrypted pairwise counts.
-  \rocq{ballot_zk} and \rocq{tally_zk}: every ballot and certificate
-  transcript is perfectly simulatable from the public ciphertexts and,
-  for the certificate, the witness paths. \rocq{schulze_end_to_end}:
-  accepted ballots and an accepted certificate together name a Schulze
-  winner of the rankings the voters cast. 
-  The extracted client and verifier from Rocq proofs run on the $13$ Gentoo
-  council elections of 2011--2023: every published ballot is accepted,
-  every certificate verifies, and every certified winner is the
+  (Section~\ref{sec:mech}). We prove in Rocq that an accepted ballot
+  encrypts a single ranking (\rocq{ballot_sound}), and that an accepted
+  certificate names a Schulze winner of the encrypted pairwise counts
+  (\rocq{verify_tally_sound}). Every ballot and certificate transcript
+  can be simulated perfectly from the public ciphertexts and, for the
+  certificate, the witness paths (\rocq{ballot_zk}, \rocq{tally_zk}).
+  Together, accepted ballots and an accepted certificate name a Schulze
+  winner of the rankings the voters cast (\rocq{schulze_end_to_end}).
+  The client and the verifier extracted from the Rocq proofs run on the
+  $13$ Gentoo council elections of 2011--2023: every published ballot is
+  accepted, every certificate verifies, and every certified winner is the
   first-seat winner of Gentoo's official count
   (Section~\ref{sec:eval:gentoo}).
   \item \textbf{A certified $\Sigma$-protocol library}
-  (Section~\ref{schn_proof}): completeness, special soundness, and special
-  honest-verifier zero-knowledge for the Schnorr, Chaum--Pedersen,
-  encryption, and decryption proofs and their $n$-ary compositions,
-  generic in the group and extracted to executable code. Used as a test
-  oracle for Belenios's verifier, the extracted code found a defect in an
-  audit tool (Section~\ref{sec:eval:oracle}). The Rocq proofs are at
+  (Section~\ref{schn_proof}). It proves completeness, special soundness,
+  and special honest-verifier zero-knowledge for the Schnorr,
+  Chaum--Pedersen, encryption, and decryption proofs and their $n$-ary
+  compositions. It works for any group and is extracted to executable
+  code. Used as a test oracle for Belenios's verifier, the extracted code
+  found a defect in an audit tool (Section~\ref{sec:eval:oracle}). The
+  Rocq proofs are at
   \textcolor{rocqlink}{\url{https://anonymous.4open.science/r/SigmaProtocol-EBA5/README.md}},
   and their documentation is at
   \textcolor{rocqlink}{\url{https://anonymous.4open.science/r/SigmaProtocol-EBA5/doc/html/toc.html}}.

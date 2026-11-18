@@ -48,33 +48,31 @@
 \maketitle
 
 \begin{abstract}
-A ranked-choice election with $m$ candidates admits $m!$ rankings, so a
-published ballot works as a signature of its voter (the \emph{Italian
-attack}), and in a small electorate published pairwise counts
-identify ballots too. Verifiable tallies for the Schulze method publish
-one or the other. The tally-hiding systems that publish neither rely on
-multi-party computation or on SNARKs with a trusted setup.
+In a ranked-choice election with $m$ candidates there are $m!$ possible
+rankings, so a published ballot is often unique and identifies its voter
+(the \emph{Italian attack}). In a small electorate, published pairwise
+counts identify ballots too. Verifiable tallies for the Schulze method
+publish one or the other. The tally-hiding systems that publish neither
+rely on multi-party computation or on SNARKs with a trusted setup.
 
-We present a verifiable Schulze election that publishes neither and is
-built entirely from $\Sigma$-protocols. The public learns the winner 
-but no margin. A ballot is a matrix
-of encrypted pairwise bits anchored to an encrypted ranking, so its
-well-formedness is a conjunction of membership proofs. Pairwise counts are
-aggregated homomorphically and never decrypted on the bulletin board. The
-winner is certified over committed counts by a zero-knowledge closure
-certificate of $O(m^3)$ proofs, independent of the number of voters. 
-Every proof it uses comes from a certified library of
-$\Sigma$-protocols in the Rocq theorem prover. The library has
+We present a verifiable Schulze election that publishes neither and uses
+only $\Sigma$-protocols. The public learns the winner but no margin. A
+ballot is a matrix of encrypted pairwise bits tied to an encrypted
+ranking, and the voter proves it well formed with membership proofs. The pairwise counts are added up under encryption and never
+decrypted on the bulletin board. The trustees prove the winner correct
+with a zero-knowledge certificate of $O(m^3)$ proofs, a number that does
+not depend on the number of voters. Every proof comes from a certified
+library of $\Sigma$-protocols in the Rocq theorem prover. The library has
 machine-checked completeness, special soundness, and zero-knowledge for
 the standard protocols and their $n$-ary compositions, and is extracted
-to OCaml, WebAssembly, and CakeML. We extract the client and verifier from these
-proofs and run them on Gentoo council elections, and they certify Gentoo's winner
-in every one.
+to OCaml, WebAssembly, and CakeML. We extract the client and the verifier
+from these proofs and run them on Gentoo council elections. They certify
+Gentoo's winner in every one.
 
-In addition, the certified library also serves as a test 
-oracle for deployed systems. Comparing it with the Belenios verifier 
-on the same election data revealed a bug that accepted an invalid ballot. 
-The Belenios maintainers have since fixed it.
+The certified library is also a test oracle for deployed systems.
+Comparing it with the Belenios verifier on the same election data
+revealed a bug that accepted an invalid ballot. The Belenios maintainers
+have since fixed it.
 \end{abstract}
 
 \input{sections/intro}
@@ -91,22 +89,21 @@ The Belenios maintainers have since fixed it.
 The Belenios experiments ran on our machines against open-source
 releases of \texttt{belenios-tool} and elections generated with it. They
 involved no production system and no voter data. We reported the dropped
-ballot check to the Belenios maintainers by e-mail on 21 October 2026,
-and they confirmed and fixed it the next day
+ballot check to the Belenios maintainers by e-mail, and they confirmed 
+and fixed it the next day
 (\texttt{115d0d47}).
 
 \section*{Data Availability}
-The Rocq development, the extracted code, the Belenios harness, the
+The Rocq development, the extracted code, the
 public Gentoo ballots, and the scripts behind every number are at
 \url{https://anonymous.4open.science/r/SigmaProtocol-EBA5}. We will
 release them under an open-source licence.
 
 \section*{Acknowledgments}
-\TODO{confirm the scope of this disclosure.} We used Claude (Anthropic)
-to edit the text of every section for style and to cross-link the Rocq
-names to the artefact; the authors checked every technical statement
-against the Rocq development.
-
+We have used AI-based tools for proofreading, editing, and grammar 
+enhancement. All AI-generated or AI-assisted outputs have been 
+manually reviewed and verified, and we take full responsibility 
+for their accuracy, originality, and integrity.
 \bibliographystyle{IEEEtran}
 \bibliography{reference,new}
 
