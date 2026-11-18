@@ -62,10 +62,7 @@ EasyCrypt~\cite{cortier2018belenios}. Verified verifiers for
 elections~\cite{10.1145/3319535.3354247} and for mix-nets~\cite{9519460,287095}
 check election and mix-net outcomes after the fact, and Pattinson
 and Tiwari~\cite{10.1007/978-3-319-66107-0_26} give the Schulze method
-as evidence-carrying computation, with an extracted counter run on the
-Debian vote archive. The closure certificate of Section~\ref{sec:tally}
-is the Kleene closure of the min-max semiring of that work, here proved
-over encrypted values.
+as evidence-carrying computation. 
 
 Barthe et al.~\cite{5552642} formalise $\Sigma$-protocols and their
 composition in CertiCrypt without extraction. Butler et
@@ -78,9 +75,4 @@ al.~\cite{almeida2010certifying} give a certifying compiler whose generated
 code is outside the certified boundary. Bernhard et al.\ showed that weak
 Fiat--Shamir breaks deployed verifiers~\cite{10.1007/978-3-642-34961-4_38},
 and Haines et al.\ that the 2019 Swiss Post shuffle proof was
-unsound~\cite{9152765}.
-
-Cryptofuzz~\cite{cryptofuzz} and Project Wycheproof~\cite{wycheproof}
-test unverified implementations of primitives. Neither has an oracle
-that is correct by construction or that proves false statements, which
-Section~\ref{sec:eval:oracle} needs.
+unsound~\cite{9152765}. 

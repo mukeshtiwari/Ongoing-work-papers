@@ -1,0 +1,193 @@
+% Links from the paper to the Rocq development in the anonymous artefact.
+%
+%   \rocq{name}          the Rocq name in \texttt, linked to its definition
+%   \rocq[text]{name}    arbitrary text (e.g. a defined term), linked likewise
+%   \rocqfile{path}      a repo-relative file or directory, linked
+%   \rocqfile[shown]{path}  same, displaying `shown' (in \texttt) instead
+%
+% Locations live in the table below, one \rocqdef{name}{path}{line} per name.
+% After updating the anonymous snapshot, refresh the line numbers with
+%   python3 rocqlinks.py /path/to/SigmaProtocol
+% A name missing from the table prints unlinked with a LaTeX warning.
+
+\definecolor{rocqlink}{RGB}{0,72,150}
+\newcommand{\rocqrepo}{https://anonymous.4open.science/r/SigmaProtocol-EBA5}
+
+\makeatletter
+\ExplSyntaxOn
+\tl_new:N \l__rocq_name_tl
+\cs_generate_variant:Nn \tl_replace_all:Nnn { NV }
+% print a name in \texttt, with hyphenat's breakable \_ for each underscore
+\cs_new_protected:Npn \rocq@tt #1
+  {
+    \tl_set:Nx \l__rocq_name_tl { \tl_to_str:n {#1} }
+    \tl_replace_all:NVn \l__rocq_name_tl \c_underscore_str { \_ }
+    \texttt { \tl_use:N \l__rocq_name_tl }
+  }
+\ExplSyntaxOff
+\newcommand{\rocqdef}[3]{%
+  \if\relax\detokenize{#3}\relax
+    \@namedef{rocq@url@#1}{#2}%
+  \else
+    \@namedef{rocq@url@#1}{#2\#L#3}%
+  \fi}
+\DeclareRobustCommand{\rocq}[2][]{%
+  \@ifundefined{rocq@url@#2}%
+    {\PackageWarning{rocqlinks}{No Rocq location for `\detokenize{#2}'}%
+     \if\relax\detokenize{#1}\relax\rocq@tt{#2}\else#1\fi}%
+    {\href{\rocqrepo/\@nameuse{rocq@url@#2}}%
+      {\textcolor{rocqlink}{\if\relax\detokenize{#1}\relax\rocq@tt{#2}\else#1\fi}}}}
+\DeclareRobustCommand{\rocqfile}[2][]{%
+  \href{\rocqrepo/#2}%
+    {\textcolor{rocqlink}{\if\relax\detokenize{#1}\relax\rocq@tt{#2}\else\rocq@tt{#1}\fi}}}
+\makeatother
+
+% ---------------------------------------------------------------------------
+% Core library: Sigma-protocols and distributions
+\rocqdef{sigma_proto}{src/Crypto/Sigma.v}{134}
+\rocqdef{schnorr_protocol}{src/Crypto/Sigma.v}{167}
+\rocqdef{schnorr_simulator}{src/Crypto/Sigma.v}{173}
+\rocqdef{accepting_conversation}{src/Crypto/Sigma.v}{178}
+\rocqdef{schnorr_distribution}{src/Crypto/Sigma.v}{191}
+\rocqdef{simulator_distribution}{src/Crypto/Sigma.v}{198}
+\rocqdef{schnorr_completeness}{src/Crypto/Sigma.v}{263}
+\rocqdef{simulator_completeness}{src/Crypto/Sigma.v}{321}
+\rocqdef{special_soundness_berry_gen}{src/Crypto/Sigma.v}{364}
+\rocqdef{special_soundness_berry}{src/Crypto/Sigma.v}{431}
+\rocqdef{special_honest_verifier_zkp_perm}{src/Crypto/Sigma.v}{721}
+\rocqdef{special_honest_verifier_zkp_enum}{src/Crypto/Sigma.v}{746}
+\rocqdef{dist}{src/Probability/Distr.v}{63}
+\rocqdef{uniform_with_replacement}{src/Probability/Distr.v}{291}
+\rocqdef{vector_space}{src/Algebra/Hierarchy.v}{344}
+\rocqdef{vec_vspace}{src/Algebra/Vector_product_space.v}{231}
+
+% Compositions: Or, encryption and decryption proofs, distributed ElGamal
+\rocqdef{generalised_construct_or_conversations_schnorr}{src/Crypto/OrSigmaGen.v}{217}
+\rocqdef{generalised_construct_or_conversations_simulator}{src/Crypto/OrSigmaGen.v}{242}
+\rocqdef{generalised_or_schnorr_distribution}{src/Crypto/OrSigmaGen.v}{309}
+\rocqdef{generalised_or_simulator_distribution}{src/Crypto/OrSigmaGen.v}{320}
+\rocqdef{generalised_or_sigma_soundness_main}{src/Crypto/OrSigmaGen.v}{1560}
+\rocqdef{generalised_or_special_honest_verifier_zkp_perm}{src/Crypto/OrSigmaGen.v}{2145}
+\rocqdef{generalised_construct_encryption_proof_elgamal_real}{src/Crypto/EncProof.v}{178}
+\rocqdef{generalised_accepting_encryption_proof_elgamal}{src/Crypto/EncProof.v}{251}
+\rocqdef{construct_decryption_proof_elgamal_real}{src/Crypto/DecProof.v}{90}
+\rocqdef{decryption_proof_accepting_conversations}{src/Crypto/DecProof.v}{105}
+\rocqdef{DistElgamal}{src/Crypto/DistElgamal.v}{55}
+
+% Linear-map Sigma-protocol and Bayer--Groth zero argument
+\rocqdef{lin_verify}{src/Crypto/LinearSigma.v}{186}
+\rocqdef{lin_completeness}{src/Crypto/LinearSigma.v}{202}
+\rocqdef{lin_soundness}{src/Crypto/LinearSigma.v}{234}
+\rocqdef{lin_shvzk}{src/Crypto/LinearSigma.v}{332}
+\rocqdef{com}{src/Crypto/BayerGroth.v}{579}
+\rocqdef{zero_argument}{src/Crypto/BayerGroth.v}{1017}
+\rocqdef{zero_completeness}{src/Crypto/BayerGroth.v}{1055}
+\rocqdef{zero_soundness}{src/Crypto/BayerGrothSound.v}{572}
+\rocqdef{zero_shvzk}{src/Crypto/BayerGrothZK.v}{909}
+
+% Instantiation: Schnorr group, prime field, vector space
+\rocqdef{Zpfield}{src/Utility/Zpstar.v}{333}
+\rocqdef{Zp}{src/Utility/Zpstar.v}{346}
+\rocqdef{Schnorr}{src/Utility/Zpstar.v}{782}
+\rocqdef{Schnorr_group}{src/Utility/Zpstar.v}{797}
+\rocqdef{pow}{src/Utility/Zpstar.v}{1232}
+\rocqdef{pow_vspace}{src/Utility/Zpstar.v}{1440}
+\rocqdef{prime_order}{src/Utility/SchnorrOrder.v}{73}
+\rocqdef{pow_injective}{src/Utility/SchnorrOrder.v}{153}
+\rocqdef{natF_injective_below_q}{src/Utility/SchnorrOrder.v}{197}
+
+% The first Schulze ballot (Frontend/Schulze.v)
+\rocqdef{membership_proof}{src/Frontend/Schulze.v}{159}
+\rocqdef{verify_membership}{src/Frontend/Schulze.v}{164}
+\rocqdef{pair_shift}{src/Frontend/Schulze.v}{199}
+\rocqdef{ballot}{src/Frontend/Schulze.v}{222}
+\rocqdef{pair_combined}{src/Frontend/Schulze.v}{236}
+\rocqdef{verify_pair_cell}{src/Frontend/Schulze.v}{247}
+\rocqdef{verify_ballot}{src/Frontend/Schulze.v}{265}
+\rocqdef{aggregate_margins}{src/Frontend/Schulze.v}{275}
+\rocqdef{plaintext_bit}{src/Frontend/Schulze.v}{282}
+\rocqdef{encrypt_ballot}{src/Frontend/Schulze.v}{360}
+\rocqdef{nizk_verify_ballot}{src/Frontend/Schulze.v}{412}
+\rocqdef{nizk_encrypt_ballot}{src/Frontend/Schulze.v}{427}
+\rocqdef{ballot_valid}{src/Frontend/Schulze.v}{749}
+\rocqdef{exp_injective}{src/Frontend/Schulze.v}{773}
+\rocqdef{natF_injective}{src/Frontend/Schulze.v}{777}
+\rocqdef{same_announcements}{src/Frontend/Schulze.v}{905}
+\rocqdef{different_challenges}{src/Frontend/Schulze.v}{917}
+\rocqdef{ballot_sound}{src/Frontend/Schulze.v}{990}
+\rocqdef{aggregate_margins_enc}{src/Frontend/Schulze.v}{1077}
+\rocqdef{nizk_ballot_valid}{src/Frontend/Schulze.v}{1256}
+\rocqdef{margin_count}{src/Frontend/Schulze.v}{1296}
+\rocqdef{cdec_aggregate}{src/Frontend/Schulze.v}{1312}
+\rocqdef{ballot_zk}{src/Frontend/Schulze.v}{1562}
+
+% The batched ballot (Frontend/SchulzeSimple.v, Frontend/SchulzeBatched.v)
+\rocqdef{gd}{src/Frontend/SchulzeSimple.v}{351}
+\rocqdef{C0}{src/Frontend/SchulzeSimple.v}{356}
+\rocqdef{phi3}{src/Frontend/SchulzeSimple.v}{364}
+\rocqdef{ballot3}{src/Frontend/SchulzeSimple.v}{374}
+\rocqdef{verify_ballot3}{src/Frontend/SchulzeSimple.v}{413}
+\rocqdef{com_gd}{src/Frontend/SchulzeSimple.v}{460}
+\rocqdef{ballot3_valid}{src/Frontend/SchulzeSimple.v}{814}
+\rocqdef{nizk_encrypt_ballot3}{src/Frontend/SchulzeSimple.v}{881}
+\rocqdef{nizk_ballot3_valid}{src/Frontend/SchulzeSimple.v}{899}
+\rocqdef{lin_open3}{src/Frontend/SchulzeSimple.v}{933}
+\rocqdef{phi3_target_open}{src/Frontend/SchulzeSimple.v}{945}
+\rocqdef{zero_open_at}{src/Frontend/SchulzeSimple.v}{1022}
+\rocqdef{zero_open_ref}{src/Frontend/SchulzeSimple.v}{1066}
+\rocqdef{coeffs_vanish}{src/Frontend/SchulzeSimple.v}{1127}
+\rocqdef{prod_of_star}{src/Frontend/SchulzeSimple.v}{1145}
+\rocqdef{bits_of_star}{src/Frontend/SchulzeSimple.v}{1169}
+\rocqdef{C0_open}{src/Frontend/SchulzeSimple.v}{1197}
+\rocqdef{ballot3_sound}{src/Frontend/SchulzeSimple.v}{1285}
+\rocqdef{ballot3_zk}{src/Frontend/SchulzeSimple.v}{1622}
+\rocqdef{root_unique}{src/Frontend/SchulzeBatched.v}{1155}
+\rocqdef{beta_bits}{src/Frontend/SchulzeBatched.v}{1478}
+\rocqdef{decode_positions}{src/Frontend/SchulzeBatched.v}{1615}
+
+% The Schulze method, the certificate, and the count (Backend/SchulzeTally.v)
+\rocqdef{defeat}{src/Backend/SchulzeTally.v}{115}
+\rocqdef{path_strength}{src/Backend/SchulzeTally.v}{142}
+\rocqdef{cert_ok}{src/Backend/SchulzeTally.v}{157}
+\rocqdef{schulze_winner}{src/Backend/SchulzeTally.v}{164}
+\rocqdef{is_closure}{src/Backend/SchulzeTally.v}{171}
+\rocqdef{cert_ok_is_closure}{src/Backend/SchulzeTally.v}{216}
+\rocqdef{closure_unique}{src/Backend/SchulzeTally.v}{230}
+\rocqdef{cert_winner}{src/Backend/SchulzeTally.v}{247}
+\rocqdef{minmax_closure}{src/Backend/SchulzeTally.v}{285}
+\rocqdef{witness_path}{src/Backend/SchulzeTally.v}{327}
+\rocqdef{cert_ok_b}{src/Backend/SchulzeTally.v}{353}
+\rocqdef{tally_shift}{src/Backend/SchulzeTally.v}{495}
+\rocqdef{verify_range}{src/Backend/SchulzeTally.v}{508}
+\rocqdef{defeat_statements}{src/Backend/SchulzeTally.v}{519}
+\rocqdef{upper_statements}{src/Backend/SchulzeTally.v}{533}
+\rocqdef{verify_edges}{src/Backend/SchulzeTally.v}{575}
+\rocqdef{tally_proof}{src/Backend/SchulzeTally.v}{558}
+\rocqdef{verify_path}{src/Backend/SchulzeTally.v}{587}
+\rocqdef{tally_checks}{src/Backend/SchulzeTally.v}{608}
+\rocqdef{verify_tally}{src/Backend/SchulzeTally.v}{631}
+\rocqdef{nizk_generate_tally}{src/Backend/SchulzeTally.v}{877}
+\rocqdef{count}{src/Backend/SchulzeTally.v}{927}
+\rocqdef{ax}{src/Backend/SchulzeTally.v}{928}
+\rocqdef{cvalid}{src/Backend/SchulzeTally.v}{931}
+\rocqdef{cinvalid}{src/Backend/SchulzeTally.v}{936}
+\rocqdef{finish}{src/Backend/SchulzeTally.v}{940}
+\rocqdef{compute_final_count}{src/Backend/SchulzeTally.v}{1047}
+\rocqdef{verify_tally_complete}{src/Backend/SchulzeTally.v}{1354}
+\rocqdef{verify_tally_sound}{src/Backend/SchulzeTally.v}{1949}
+\rocqdef{schulze_end_to_end}{src/Backend/SchulzeTally.v}{2175}
+\rocqdef{count_sound}{src/Backend/SchulzeTally.v}{2251}
+\rocqdef{nizk_tally_complete}{src/Backend/SchulzeTally.v}{2379}
+\rocqdef{tally_zk}{src/Backend/SchulzeTally.v}{2805}
+\rocqdef{schulze_end_to_end3}{src/Backend/SchulzeSimpleTally.v}{64}
+
+% The instance and the running example (Examples/SchulzeIns.v)
+\rocqdef{example_cert_ok}{src/Examples/SchulzeIns.v}{347}
+\rocqdef{example_winner}{src/Examples/SchulzeIns.v}{349}
+\rocqdef{example_not_winner_A}{src/Examples/SchulzeIns.v}{351}
+\rocqdef{exp_injective_g}{src/Examples/SchulzeIns.v}{375}
+\rocqdef{natF_injective_ins}{src/Examples/SchulzeIns.v}{382}
+\rocqdef{ballot_sound_ins}{src/Examples/SchulzeIns.v}{400}
+\rocqdef{schulze_end_to_end_ins}{src/Examples/SchulzeIns.v}{415}
+\rocqdef{count_sound_ins}{src/Examples/SchulzeIns.v}{436}
+\rocqdef{tally_complete_ins}{src/Examples/SchulzeIns.v}{462}

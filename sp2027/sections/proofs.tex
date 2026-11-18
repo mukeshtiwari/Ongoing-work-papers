@@ -41,7 +41,7 @@ commitments, and $\rho \mapsto \rho + \langle \log_{h_1} \mathbf{g},
 v\rangle$ for the commitments, which makes a commitment to $v$ uniform
 in $\langle h_1 \rangle$. Reading $C_\delta$ as a commitment to $\delta$
 under $\mathbf{g}$ means the derived key needs no logarithms of its own.
-Like the library's Bayer--Groth simulators, the last step names the
-discrete logarithms of the commitment key in base $h_1$. The hypothesis
-holds for every key in the subgroup, and the proof uses the exponents
-only to exhibit the bijection; the simulator does not use them.
+Like the library's Bayer--Groth proofs, the last step writes each
+commitment generator as a power of $h_1$, $g_j = h_1^{e_j}$. Such
+exponents exist for every key in the subgroup; the proof uses them only
+to exhibit the bijection, and the simulator never needs them.

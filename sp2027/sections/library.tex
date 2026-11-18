@@ -7,11 +7,10 @@ Parallel, And, Eq, and Neq compositions.
 
 In an implementation, group elements and field elements are both large integers and
 mixing them up is a known source of bugs~\cite{10.1007/978-3-662-63958-0_24}. 
-The library separates
-them by type: an abstract group $G$, an abstract field $F$, and a
-\rocq[\emph{vector space}]{vector_space} structure relating them, with scalar multiplication
-written $\mbox{\textasciicircum} : G \to F \to G$ because it is
-exponentiation in a multiplicative group. Every protocol and
+The library gives them different types: a group $G$ and a field $F$,
+linked by a \rocq[\emph{vector space}]{vector_space} structure. Its
+scalar multiplication is exponentiation, so we write it
+$\mbox{\textasciicircum} : G \to F \to G$. Every protocol and
 theorem is generic in this structure, so the development instantiates to
 Schnorr groups and elliptic curves alike, and the field and group laws
 automate the proofs. Listing~\ref{schn_nat}
@@ -35,12 +34,9 @@ binds a uniform $u$ and returns the simulated one. The theorem of
 Listing~\ref{schn_nat} says that, when \texttt{lf} enumerates the field,
 the two are permutations of each other, i.e.\ equal as distributions. The
 proof is the textbook one ($u \mapsto u + c\cdot x$ is a bijection of
-$\mathbb{Z}_q$). The statement is as strong as the informal
-definition, because the transcripts themselves coincide, and a simulator that
-ignores its input cannot satisfy it. Every composition in the library has a
+$\mathbb{Z}_q$). Every composition in the library has a
 zero-knowledge theorem of this shape, proved by a bijection on the
-randomness, coordinatewise for conjunctions and for Chaum--Pedersen, and
-by a reshuffling of the simulated sub-challenges for disjunctions.
+randomness.
 
 \textbf{The three compositions the scheme uses:}
 \rocqfile[OrSigmaGen]{src/Crypto/OrSigmaGen.v} is the $n$-ary

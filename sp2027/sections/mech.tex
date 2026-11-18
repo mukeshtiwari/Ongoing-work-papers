@@ -40,7 +40,7 @@ stated in Section~\ref{sec:batched}; and \rocq{schulze_end_to_end3}
 (\rocqfile[Backend/SchulzeSimpleTally.v]{src/Backend/SchulzeSimpleTally.v})
 composes them with the certificate: either the commitment key is broken
 or the certified candidate is a Schulze winner of the committed
-positions. All nine theorems are closed under the global context.
+positions.
 
 Listing~\ref{lst:ballot-sound} shows \rocq{ballot_sound}. It
 concludes with a position vector $s$, $s_i \le m$, such that every pair
@@ -65,11 +65,13 @@ Section~\ref{sec:tally}.
   label={lst:ballot-sound},captionpos=t, basicstyle=\ttfamily\scriptsize,
   abovecaptionskip=-\medskipamount]
 Theorem ballot_sound : forall (n : nat) (x : F) (g h : G)
-  (b b' : @ballot (S n)),
-  h = g ^ x -> exp_injective g ->
-  natF_injective (4 * S n + 2) ->
-  same_announcements b b' -> different_challenges b b' ->
-  verify_ballot g h b = true -> verify_ballot g h b' = true ->
+  (b b' : @ballot (S n)), h = g ^ x -> 
+  exp_injective g -> 
+  natF_injective (4 * S n + 2) -> 
+  same_announcements b b' -> 
+  different_challenges b b' ->
+  verify_ballot g h b = true -> 
+  verify_ballot g h b' = true ->
   exists s : Vector.t nat (S n),
     (forall i, Vector.nth s i <= S n) /\
     (forall i j, plaintext_bit x b i j =
