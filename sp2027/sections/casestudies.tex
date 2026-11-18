@@ -1,0 +1,177 @@
+\section{Deployed Systems}\label{sec:casestudies}
+Table~\ref{tab:summary} summarises the four finished campaigns. Belenios
+comes first, since it produced the one deployed soundness finding; Swiss
+Post is the campaign that goes from a cryptographic library to a complete
+election. Findings are described at the level of the missing or weakened
+check; all were reported to the maintainers before submission
+(Section~\ref{sec:ethics}).
+
+\begin{table}[t]
+  \caption{Certified differential testing of four deployed e-voting
+  systems. Sources refer to Table~\ref{tab:sources}; a disagreement is a
+  case on which the deployed and the certified verifier differ; deployed
+  findings are defects in the deployed system (H/M/L severity);
+  certified-side bugs are defects in the trusted boundary of our own
+  verifier (Section~\ref{sec:lessons}).}
+  \label{tab:summary}
+  \centering\scriptsize\setlength{\tabcolsep}{3pt}
+  \begin{tabularx}{\columnwidth}{@{}l>{\raggedright\arraybackslash}Xrrll@{}}
+    \toprule
+    System & Deployed oracle (pinned) & Cases & Disagr. & Findings & Ours \\
+    \midrule
+    Belenios & \texttt{belenios-tool} 3.2.0; S1--S4, S6, S7 & 1{,}715\textsuperscript{b} & 146 & 1\,H, 2\,M, 1\,L & 1 \\
+    Swiss Post & crypto-primitives 1.6.1.0, Verifier 1.7.1.0; S1--S8 & 9{,}238\textsuperscript{a} & 0 & 5\,L & 5 \\
+    Helios & helios-server \texttt{88621e3}, booth JS; S1--S4, S7 & 734 & 70 & 4\,L & 3 \\
+    Verificatum & \texttt{vmnv} 3.1.0; S1, S3, S4, S7 & 158 & 8 & 1\,L & 1 \\
+    \midrule
+    Total & & 11{,}845 & 224 & 1\,H, 2\,M, 11\,L & 10 \\
+    \bottomrule
+  \end{tabularx}\\[2pt]
+  \raggedright\scriptsize
+  \textsuperscript{a}\,Differential cases of S1--S7; S8 adds about $6.5\times10^{8}$ fuzzing executions on the deployed side alone.
+  \textsuperscript{b}\,961 cases on homomorphic elections and 754 on the mix-net; a further 103 mix-net cases run on the extracted certified verifier alone.
+\end{table}
+
+\subsection{Belenios}\label{sec:cs:belenios}
+We compare \texttt{belenios-tool election verify} (release 3.2.0), the
+verifier the Belenios specification prescribes to auditors, with our
+certified verifier on five elections generated with \texttt{belenios-tool}
+itself and on 961 honest, mutated, structural and forged boards; the
+forgeries are consistent archives with re-signed events, built by an
+independent implementation of the specification.
+
+\paragraph{A dropped check}
+On the honest elections both verifiers agree and accept, and all 749
+field mutants are rejected by both. The disagreements concentrate in the
+forge stage: \texttt{election verify} accepts 36 boards that our verifier
+rejects. Each contains a single invalid ballot, a well-formed ciphertext
+encrypting a value outside the allowed range with random proofs and a
+random signature under a listed credential, inside an otherwise fully
+consistent archive (hash chain, encrypted tally, trustee decryption
+proofs and result all recomputed to match). The ballot is counted, and
+the audit command reports \emph{``all checks passed''}; Belenios's own
+per-ballot checker, \texttt{election verify-ballot}, and our verifier
+reject it. The cause is one line of \texttt{src/tool/tool\_election.ml}:
+the \texttt{verify} command forces the lazy ballot-verification
+computation but discards the resulting promise, \texttt{ignore (Lazy.force
+verified\_ballots)}, so the rejection raised for an invalid ballot is
+never observed (Lwt does not report rejected promises that nobody
+awaits), and the per-ballot signature and proof checks have no effect on
+the verdict; the \texttt{--skip-ballot-check} flag discards the same
+promise and was already a no-op. Under the universal-verifiability threat
+model, where the server builds the published archive, this lets a server
+count ballots with invalid proofs or signatures, stuffing a ballot under
+a credential that never voted or overwriting a voter's ballot, while the
+official audit tool reports success; no trustee secret is required. The
+defect was introduced in 2023 and is present in releases 3.1 through
+3.3.0. We reported it to the maintainers, who confirmed it in 3.3.0,
+attributed it to the same cause (``an exception not being propagated
+properly''), and committed a fix (\texttt{115d0d4}) that forces the
+ballot computation under \texttt{Lwt.try\_bind} and re-raises its
+exception; the patched tool rejects the previously accepted boards with
+\texttt{InvalidBallot} and still accepts honest elections. The web
+server, which checks ballots on submission, was not affected; the defect
+was confined to the offline command an auditor is directed to run.
+
+\paragraph{The mix-net and a missing subgroup check}
+Belenios's non-homomorphic questions are mixed with a
+Terelius--Wikstr\"om proof of a shuffle~\cite{haenni2017pseudocode} over
+Ed25519, a curve of cofactor~8. The extracted certified
+Terelius--Wikstr\"om verifier, run at Ed25519 with no new proof (it is
+parametric in the group and takes its challenges as closures), accepts
+\texttt{belenios-tool}'s own shuffles. But \texttt{check\_shuffle\_proof}
+applies the subgroup test \texttt{G.check} to the proof's commitments and
+never to its input or output ciphertexts, although Belenios applies it to
+ciphertexts everywhere else. A mix server that adds a point of order~2 or
+8 to the $\beta$ component of one output and proves the shuffle honestly
+is accepted by \texttt{election verify} for a fraction of seeds that
+depends on a parity of the Fiat--Shamir challenge (26 of 100 for order~2,
+2 of 100 for order~8); the torsion survives the honest re-encryptions of a
+chain of servers and is caught only at decryption. Over 754 mix-net
+cases, \texttt{belenios-tool} accepts 97 that the certified pipeline
+rejects, and nothing in the other direction: a soundness gap in the audit
+tool's shuffle verdict (medium), not a result forgery. \TODO{Disclosure
+of this finding; Section~\ref{sec:ethics} currently covers only the
+dropped ballot check.} Fed the same tampered shuffles with its decoder's
+subgroup check bypassed on purpose, the extracted certified verifier
+accepts them at the same rate as Belenios: the verified algebra does not
+reject a torsion point, because in Rocq the group type \emph{is} the
+order-$\ell$ subgroup and extraction erases that proof. The certified
+pipeline rejects all of them at its decoder, which checks the order of
+every point before anything reaches the certified code. This is the
+sharpest instance of Section~\ref{sec:lessons}: the soundness of an
+extracted verifier rests on its decoder enforcing the group the proofs
+assume.
+
+\subsection{Swiss Post}\label{sec:cs:swisspost}
+The Swiss Post system is used for Swiss voters abroad; its 2019 version
+was withdrawn after flaws in its proof of shuffle~\cite{9152765}, and the
+current version publishes its source, specifications and a bug bounty.
+We pinned \texttt{crypto-primitives}~1.6.1.0 (Java, specified in
+pseudocode~\cite{swisspost_cryptoprimitives_spec}), the
+Verifier~1.7.1.0~\cite{swisspost_verifier_spec} and the
+\texttt{testdata}~1.6.1.0 repository~\cite{swisspost_testdata}, and
+instantiated a certified verifier and prover for the Bayer--Groth shuffle
+argument~\cite{10.1007/978-3-642-29011-4_17} (machine-checked
+before~\cite{287095}) and the library's verifier for its four other
+proofs at the 3072-bit group of the test vectors, with Coqprime
+certificates for $p$ and $q$. On the shuffle argument (nine shapes,
+including a key longer than the ciphertexts) both verifiers accept every
+honest argument and the recomputed challenges equal Swiss Post's, every
+one of 1{,}224 field mutants is rejected by both, arguments of our
+extracted prover with degenerate randomness and identity permutation are
+accepted by Swiss Post's verifier, and both reject every proof of a false
+shuffle; the production mixing path agrees with the certified verifier on
+154 cases up to $1000$ ciphertexts. For each of the seven bound checks of
+Table~\ref{tab:bgchecks}, on five shapes, the control is accepted and the
+forgery rejected by both verifiers (66 cases), and the Swiss Post verifier
+reports exactly the targeted check; every bound check is present and
+necessary. The four other proofs agree on 7{,}223 cases. For the synthetic
+election \texttt{Post\_E2E\_DEV} our protocol wiring verifies all 20
+shuffles, 60 decryption proofs and 57 checks without proofs in 12\,s,
+and of 29 tampered copies re-signed with the published development keys
+(boxes swapped, votes dropped, duplicated, added or reordered, proofs or
+decryptions changed, a final mix redone under a fresh key) the Verifier
+rejects all but the reordering the specification sorts, and the certified
+side agrees on the 21 scenarios in its scope. We found no soundness
+defect and five low-severity ones: lenient Base64/Base32 decoders where
+the specification assumes injective encodings, six constructors that
+throw the wrong exception on empty vectors, decoding evaluated after a
+failed proof so that the auditor sees an unexpected error, payloads
+refused by the domain classes reported as errors rather than failed
+checks, and a tally manifest naming another election that the Verifier
+does not read.
+
+\subsection{Helios}\label{sec:cs:helios}
+We compare Helios's own Python cryptography (helios-server, commit
+\texttt{88621e3}), driven through its verification path, with our
+certified verifier on five generated elections whose ballots come half
+from the booth's JavaScript and half from our certified prover, and on
+the IACR 2023 and 2024 elections. Each verifier accepts the other side's
+honest ballots. Over 734 cases nothing is accepted by the certified
+verifier and rejected by Helios; Helios accepts 70 inputs that the
+certified verifier rejects, 55 by deliberate strictness on our side
+(canonical JSON only) and 15 from four low-severity leniencies of Helios:
+extra individual proofs and extra decryption factors are ignored, proof
+responses are not reduced or range-checked, and integers are parsed
+leniently, so that many encodings of one ballot verify. None changes a
+vote or a tally.
+
+\subsection{Verificatum}\label{sec:cs:verificatum}
+Verificatum~\cite{verificatum} is Wikstr\"om's mix-net; its proof of a
+shuffle is the Terelius--Wikstr\"om
+argument~\cite{terelius2010restricted,10.1007/978-3-642-02620-1_28} and
+auditors run its stand-alone verifier \texttt{vmnv} (VMN and VCR 3.1.0,
+pure Java). The certified verifier implements the specification's
+Algorithms~19, 22, 25 and~27 at the certified 2048-bit group; the trusted
+boundary parses byte trees, derives generators and computes the two
+SHA-256 oracles. On sessions produced by \texttt{vmn}'s own demo scripts
+with seeded randomness, 79 cases per session (honest, typed leaf
+mutations, structural and encoding mutants, protocol tampering, a crafted
+collision of first announcements), the verifiers agree on 75; the four
+disagreements have \texttt{vmnv} accepting and the certified verifier
+rejecting, and each is sound: a corrupted decryption reply of a server
+outside the threshold subset \texttt{vmnv} combines, and a trailing
+element in a proof array (one low). No forged proof is accepted by either
+verifier. The campaign also found a completeness bug in our own boundary,
+a table keyed by a non-unique announcement (Section~\ref{sec:lessons}).

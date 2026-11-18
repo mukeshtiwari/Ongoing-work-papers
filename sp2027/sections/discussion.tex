@@ -1,0 +1,91 @@
+\section{Discussion}\label{sec:discussion}
+
+Several parts of the system are not mechanised. The mechanised tally decrypts with a single trustee key. In a
+deployment the key is shared: trustee $i$ holds $x_i$ and publishes $h_i =
+g^{x_i}$ with a Schnorr proof of knowledge, which prevents a rogue-key
+attack, and the election key is $h = h_1 \cdots h_n$. Ballots, their
+proofs, and aggregation use only $h$, so their theorems hold unchanged.
+Only part (i) of the certificate uses the secret key. With shared keys it
+becomes one partial decryption per trustee, each with a Chaum--Pedersen
+proof against $h_i$. The library's \rocq{DistElgamal} module proves that
+the partial decryptions combine correctly. Parts (ii)--(iv) need only the
+randomness of the fresh encryptions and do not change. The lemma that $n$
+accepted partial-decryption proofs imply a correct combined decryption is
+not yet mechanised. The sharing is $n$-of-$n$, so privacy
+needs one honest trustee but every trustee must take part. A $t$-of-$n$
+sharing would add Shamir shares and Lagrange interpolation.
+The Fiat--Shamir step is on paper: the
+non-interactive theorems (\rocq{nizk_ballot_valid},
+\rocq{nizk_tally_complete}) are completeness statements, and
+soundness is stated in the rewinding form of special soundness.
+Connecting the library to a formalisation of the random oracle
+model~\cite{10.1007/11617990_3} is future work. Ballot privacy and
+receipt-freeness combine the zero-knowledge theorems with an on-paper
+IND-CPA reduction (Section~\ref{sec:security}), and there is no game-based
+receipt-freeness theorem. The closure algorithm of the honest trustees
+is unverified, but soundness does not depend on it, because its certificate is
+checked.
+
+The theorems of Section~\ref{sec:mech} are about what the certified
+verifier checks. Unverified code decides what reaches it and about which
+values, and the Belenios defects were in such code. The security of the
+scheme depends on three decisions in that code. The decoder that admits a
+ballot from the board must check that every group element has order $q$
+and every field element is reduced, since \rocq{ballot_sound} is a
+theorem about elements of the group type. The verifier must \emph{derive}
+the $\delta$ ciphertexts from the position ciphertexts and never accept
+them as inputs (Section~\ref{sec:ballot}). A driver that read
+$\mathrm{Enc}(\delta_{ij})$ from the ballot would verify every proof and
+count a ballot twice. Finally, the Fiat--Shamir challenge of a
+ballot must bind the voter's credential, or a ballot can be replayed
+under another one. The mechanised theorems hold for any oracle. The
+driver instantiates the oracle per voter (Section~\ref{sec:eval:gentoo}), and
+a driver that did not would be wrong. Every run of the Gentoo driver
+tests the credential binding: it replays a ballot under another
+credential and checks that the verifier rejects it. The types enforce
+the derivation of $\delta$: the mechanised ballot has no field for
+$\mathrm{Enc}(\delta_{ij})$, so no driver can supply one, and
+\rocq{verify_ballot} computes it. This wiring is protocol logic that no
+current formalisation covers end to end. The \rocq{count} judgement
+covers the aggregation and the final check. The next proof we would
+write extends it to the derivation of the statements each proof is
+about.
+
+The number of certificate proofs is independent of $N$, but each range
+proof and each closure disjunction is a membership proof with $O(N)$
+branches, so the certificate has $O(m^3 N)$ group elements and the
+trustees' and verifier's time grows linearly with the electorate
+(Section~\ref{sec:eval:tally}). The first ballot has $O(m^3)$ group
+elements for the same reason, $O(m)$ branches in each of $m^2$ cells.
+The batched ballot of Section~\ref{sec:batched} removes the branches
+and costs $O(m^2 \log m)$. The same batching applies to the certificate.
+The trustees know the openings of $d$ and $p$, so every range check of
+Section~\ref{sec:tally} is a bit-decomposed range of a linear form of
+committed vectors, provable by one zero argument, and the closure
+disjunction becomes a committed minimum with one product check. The
+certificate would then be $O(m^3 \log N)$ field elements instead of
+$O(m^3 N)$ group elements. We have not implemented this.
+
+The witness paths are the certificate's only leakage beyond the winner
+(Section~\ref{sec:security}), and a certificate can do without them.
+Starting from $\mathrm{Enc}(d)$, $\lceil \log_2 (m-1) \rceil$ rounds of
+encrypted min-max squaring $p' = \max(p, p \otimes p)$ reach the closure.
+Each entry of each round needs $p' \ge p$ and the closure disjunctions of
+(iii) for $p' \ge \min(p_{ik}, p_{kj})$, and, for $p'$ to be no larger,
+one $(m{+}1)$-way disjunction stating that $p'$ is at most $p_{ij}$ or
+at most both $p_{ik}$ and $p_{kj}$ for some $k$. This gives $O(m^3 \log m)$
+disjunctions and no cleartext beyond the winner. We have neither
+implemented nor mechanised it.
+
+The two ballots rest on different assumptions
+(Table~\ref{tab:twoballots}). The first is sound by exact special
+soundness from two transcripts, with no assumption beyond the election
+group. The batched ballot assumes binding of the Pedersen commitment key,
+whose generators are hashed to the group as Verificatum and Swiss Post
+do. Its soundness is statistical and multi-round, in the
+perfect-adversary form of the library's shuffle theorems, with the
+forking argument and its Fiat--Shamir counterpart~\cite{afk21} on paper.
+Its zero-knowledge names the discrete logarithms of the key
+(Section~\ref{sec:batched}). None of these assumptions is new to the
+library or to deployed systems, but the first ballot makes none of them,
+which is why the paper keeps both ballots.

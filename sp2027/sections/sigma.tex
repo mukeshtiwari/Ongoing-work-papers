@@ -1,0 +1,74 @@
+% Reused from PoPETS-2027/main.tex lines 191-240 (unchanged except where marked SP).
+\section{$\Sigma$-Protocols}\label{sigma_protocol}
+Despite the recent growth and popularity of zero-knowledge succinct 
+arguments of knowledge (zk-SNARKs), $\Sigma$-protocols remain a
+leading cryptographic proof system in privacy-preserving voting systems. 
+$\Sigma$-protocols are used in Helios (a widely popular voting system) \cite{adida2008helios}, 
+Belenios (used in French elections for overseas 
+voters\footnote{VVFE, used in French elections, is a derivative of (part of) Belenios and 
+inherited all the zero-knowledge proofs from Belenios. \url{https://gitlab.inria.fr/vvfe/vvfe}}), \cite{cortier2023french}, and 
+SwissPost (used in Swiss elections for overseas voters) voting 
+systems \cite{10.1007/978-3-031-15911-4_4}. 
+Moreover, recently the zero-knowledge proof community started a movement to standardise
+$\Sigma$-protocols \cite{ZKProof}.
+One of the main reasons for its popularity in privacy-preserving voting systems is its
+efficiency and well-understood security.
+
+
+%\textbf{Introduce here that sigma protocol is efficient and simple and all other details about sigma protocol.} 
+Zero-knowledge proofs were first studied by Goldwasser, Micali, and Rackoff \cite{10.1145/22145.22178} and 
+are possible for all problems in $NP$ \cite{10.1145/116825.116852}. Recall that $NP$ is the class of 
+problems that have efficient verifiers; that is, for a given problem in the $NP$ class, there is 
+a polynomial-time algorithm that can verify whether a given solution, or witness, to the problem is correct or not.
+More formally, for a given binary $NP$-relation $R$ and a statement $x$, zero-knowledge proof allows a prover 
+$P$ to convince a verifier $V$ that they posses a witness $w$--polynomial in the length of $x$--such 
+that ($x$, $w$) $\in$ $R$. To achieve this, $P$ and $V$ engage in an 
+interactive protocol and at the end $V$ either accepts or rejects the proof.
+A $\Sigma$-protocol is an efficient 3-move zero-knowledge proof (where the 
+verifier is assumed to be honest) characterised by completeness, (special) soundness, and 
+(special honest-verifier) zero-knowledge. More formally: (i) \textbf{completeness:}
+  when $P$ and $V$ follow the protocol, $V$ always accepts. 
+  In other words, if $P$ knows $w$ for $x$ such that ($x$, $w$) $\in$ $R$,  
+  then $P$ can successfully construct a proof $(a, c, r)$ that always passes the verification equation, 
+  i.e., $V$ accepts; (ii) \textbf{special soundness:}
+there exists a probabilistic polynomial-time extractor $E$ which given 
+two accepting transcripts $(a, c, r)$ and $(a, c', r')$ with $c\neq c'$ for $x$, 
+it can extract a witness $w$ such that $(x, w) \in R$; and (iii) \textbf{special honest-verifier zero-knowledge:}
+there exists a probabilistic polynomial-time simulator \(S\) such that, for every \(x \in L_R\) and every challenge \(c \in C\), \(S\) outputs a transcript \((a,c,r)\) whose distribution is identical to that of a real interaction between an honest prover \(P\) (holding a witness \(w\) with \((x,w)\in R\)) and an honest verifier \(V\) using challenge $c$. Furthermore, for any \(x \notin L_R\), the simulator \(S\) is only required to output an arbitrary accepting transcript \((a,c,r)\) for the given challenge \(c \in C\).
+
+
+The notion of a $\Sigma$-protocol was first identified and studied by Cramer~\cite{cramer1996modular},
+as an appropriate abstraction of the (special) honest-verifier zero-knowledge, special-sound protocols considered in~\cite{cramer1994proofs}.
+Probably the best-known $\Sigma$-protocol is due to Schnorr~\cite{schnorr1991efficient}.
+The Schnorr protocol is used extensively in privacy-preserving voting systems, e.g, Helios, Belenios, SwissPost, etc. Therefore, 
+our formalisation is geared towards this protocol. Moreover, we formalise the $n$-ary composition of Schnorr $\Sigma$-protocols, instantiating Parallel, And, Or, Eq, and Neq constructions for arbitrary $n$. In addition, we also formalise the Okamoto protocol, encryption proofs (demonstrating that ElGamal ciphertexts encrypt specific values), decryption proofs (verifying correct decryption by election trustees), and protocol for proving knowledge of committed values satisfying linear constraints~\cite{Bra97}. Additionally, we instantiate Eq-composition to obtain the Chaum-Pedersen protocol for proving equality of discrete logarithms. Ideally, given the abstraction of our formalisation (\textit{vector space}), we could have 
+abstracted $\Sigma$-protocols and their composition in a generic way \cite{10.1007/978-3-642-02384-2_17},
+but we decided to focus on the Schnorr protocol and its composition to ensure familiar APIs 
+for electronic voting in WebAssembly and OCaml.
+
+\subsection{The Schulze method and tally hiding}\label{sec:bg:schulze}
+A ranked ballot over $m$ candidates orders the candidates, with ties
+allowed. Its pairwise content is, for every ordered pair $(i,j)$, whether
+the voter ranks $i$ strictly above $j$; summed over the ballots this gives
+the \emph{margin matrix} $D$, where $D_{ij}$ is the number of voters who
+rank $i$ above $j$. Candidate $i$ \emph{defeats} $j$ with strength
+$d_{ij} = D_{ij}$ if $D_{ij} > D_{ji}$, and $d_{ij} = 0$ otherwise. The
+strength of a path $i = u_0, \ldots, u_\ell = j$ is the weakest defeat on
+it, $\min_t d_{u_t u_{t+1}}$, and $p_{ij}$ is the strength of the strongest
+path from $i$ to $j$. Candidate $w$ is a \emph{Schulze winner} if
+$p_{wj} \ge p_{jw}$ for every $j$; at least one exists, and the matrix $p$
+is the closure of $d$ in the semiring with $\max$ as addition and $\min$
+as multiplication, computable by Floyd--Warshall or Kleene iteration. The
+Schulze method is used by Debian, the Free Software Foundation Europe,
+and other organisations that vote online with a few hundred to a few
+thousand voters~\cite{10.1007/978-3-319-66107-0_26}.
+
+Because $m!$ rankings exist, a verifiable ranked tally that publishes
+ballots exposes voters to the Italian attack: a coercer prescribes a
+ranking that no honest voter would cast and looks for it on the board.
+Publishing only $D$ is better but still leaks in a small electorate.
+Following Kryvos~\cite{kryvos2022}, a system is \emph{fully} tally-hiding
+if no party, talliers included, learns anything beyond the result, and
+\emph{publicly} tally-hiding if the talliers learn the aggregated tally
+(here $D$) and the public learns only the result. The scheme of
+Section~\ref{sec:schulze} is publicly tally-hiding.

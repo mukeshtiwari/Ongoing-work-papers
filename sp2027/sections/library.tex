@@ -1,0 +1,74 @@
+\section{The Certified $\Sigma$-Protocol Library}\label{schn_proof}
+Every proof of the scheme comes from a library of $\Sigma$-protocols, 
+verified in the Rocq theorem prover~\cite{the_coq_development_team}.
+This section covers the part the scheme uses, but the artefact has many more,
+including the Okamoto, linear-relation, and the
+Parallel, And, Eq, and Neq compositions.
+
+In an implementation, group elements and field elements are both large integers and
+mixing them up is a known source of bugs~\cite{10.1007/978-3-662-63958-0_24}. 
+The library separates
+them by type: an abstract group $G$, an abstract field $F$, and a
+\rocq[\emph{vector space}]{vector_space} structure relating them, with scalar multiplication
+written $\mbox{\textasciicircum} : G \to F \to G$ because it is
+exponentiation in a multiplicative group. Every protocol and
+theorem is generic in this structure, so the development instantiates to
+Schnorr groups and elliptic curves alike, and the field and group laws
+automate the proofs. Listing~\ref{schn_nat}
+(Appendix~\ref{appendix_listings}) shows the Schnorr protocol (\rocq{schnorr_protocol}, \rocq{schnorr_simulator}, \rocq{accepting_conversation}, \rocq{special_honest_verifier_zkp_enum}): the prover's transcript for randomness $u$
+and witness $x$, the simulator's transcript for randomness $u$ without
+the witness, and the verifier's test $g^r = a \cdot h^c$.
+
+
+Completeness and special soundness are plain equations over the group
+and field, with no probability involved (\rocq{schnorr_completeness}
+and \rocq{special_soundness_berry}). Special soundness extracts
+the witness $(r - r')/(c - c')$ from two accepting transcripts that share
+an announcement but have different challenges. Zero-knowledge
+compares two probability distributions and so needs a model of them. Following~\cite{erwig2006functional}, a \rocq[distribution]{dist} is
+a list of (value, probability) pairs, and two distributions are equal when
+they are permutations of each other. The type is a monad, so a
+distribution over $n$ independent uniform draws is the $n$-fold
+composition of the \rocq[uniform distribution]{uniform_with_replacement}. The \rocq[Schnorr distribution]{schnorr_distribution} binds a
+uniform $u$ and returns the honest transcript, and the \rocq[simulator distribution]{simulator_distribution}
+binds a uniform $u$ and returns the simulated one. The theorem of
+Listing~\ref{schn_nat} says that, when \texttt{lf} enumerates the field,
+the two are permutations of each other, i.e.\ equal as distributions. The
+proof is the textbook one ($u \mapsto u + c\cdot x$ is a bijection of
+$\mathbb{Z}_q$). The statement is as strong as the informal
+definition, because the transcripts themselves coincide, and a simulator that
+ignores its input cannot satisfy it. Every composition in the library has a
+zero-knowledge theorem of this shape, proved by a bijection on the
+randomness, coordinatewise for conjunctions and for Chaum--Pedersen, and
+by a reshuffling of the simulated sub-challenges for disjunctions.
+
+\textbf{The three compositions the scheme uses:}
+\rocqfile[OrSigmaGen]{src/Crypto/OrSigmaGen.v} is the $n$-ary
+disjunction of Cramer, Damg\aa rd, and Schoenmakers~\cite{cramer1994proofs}
+over Schnorr statements $h_i = g_i^{x_i}$. The prover, knowing the
+witness of branch $k$, commits honestly there, simulates every other
+branch with chosen sub-challenges, and sets $c_k = c - \sum_{i\ne k}
+c_i$. The verifier checks $c = \sum_i c_i$ and every branch equation (soundness \rocq{generalised_or_sigma_soundness_main}, zero-knowledge \rocq{generalised_or_special_honest_verifier_zkp_perm}).
+\rocqfile[EncProof]{src/Crypto/EncProof.v} is the membership proof for ElGamal: a ciphertext
+$(g^r, g^v h^r)$ encrypts one of the messages $v_1,\ldots,v_n$, as an
+$n$-way disjunction of Chaum--Pedersen statements, one per message (\rocq{generalised_construct_encryption_proof_elgamal_real}, \rocq{generalised_accepting_encryption_proof_elgamal}).
+\rocqfile[DecProof]{src/Crypto/DecProof.v} is the Chaum--Pedersen proof that a ciphertext decrypts
+to a given plaintext under the key $h = g^x$ (\rocq{construct_decryption_proof_elgamal_real}, \rocq{decryption_proof_accepting_conversations}). Each comes with completeness,
+special soundness, and zero-knowledge theorems. The statements
+of \rocqfile[OrSigmaGen]{src/Crypto/OrSigmaGen.v} are over one group. The Schulze certificate applies
+it to the product group $G \times G$, treating a ciphertext as one
+element, which the vector-space abstraction allows without a new proof
+(Listing~\ref{or_proof}, Appendix~\ref{appendix_listings}).
+
+\textbf{Instantiation:}
+To run the extracted code we instantiate the vector space. The \rocq[Schnorr
+group]{Schnorr_group} is a record of an integer $v$ with proofs $0 < v < p$ and $v^q = 1
+\bmod p$, the field $\mathbb{Z}_q$ a \rocq[record]{Zp} of a reduced integer, and
+\rocq{pow} the scalar multiplication between them (\rocq{pow_vspace})
+(Listings~\ref{group_def}--\ref{vec_space}, Appendix~\ref{appendix_listings}).
+The group and field laws are proved with the primality of $p$ and $q$ as
+section hypotheses, which Coqprime discharges for the 2048-bit Helios
+parameters~\cite{adida2008helios} with primality
+certificates~\cite{thery2007primality}. Mixing a group element with a
+field element is a type error.
+

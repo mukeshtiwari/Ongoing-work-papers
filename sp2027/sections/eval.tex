@@ -1,0 +1,207 @@
+\section{Evaluation}\label{sec:eval}
+A script of the artefact, named in each table caption, produces every
+number in this section. All measurements are single-threaded on an
+Apple M5 Max laptop (48\,GB RAM) with the extracted OCaml code compiled
+by OCaml 5.4.1, arbitrary-precision arithmetic through
+\texttt{zarith} (GMP), and SHAKE-256 from HACL$^*$ as the Fiat--Shamir
+hash.
+
+\subsection{The leak, measured}\label{sec:eval:leak}
+Gentoo elects its Council (seven seats, yearly) and its Foundation
+Trustees with a Condorcet count. Voters rank the candidates with ties,
+unlisted candidates rank last, and \texttt{countify} applies Schwartz
+sequential dropping (the Schulze procedure of the Debian Constitution,
+A.5 steps 5--8, with no quorum, majority, or default option) repeatedly
+to produce a ranking, from which the seats are filled. Gentoo publishes every ballot under an anonymous confirmation id, so
+the archive shows what a published ballot or count matrix gives a
+coercer in the kind of election our scheme targets. On all $41$
+published elections (2005--2023), the Schulze winner computed by the
+script of Table~\ref{tab:leak} coincides with Gentoo's own first-pass
+winner. Table~\ref{tab:leak} reports, for the thirteen council elections
+of 2011--2023, the number of ballots $N$ and candidates $m$ (including
+the \texttt{\_reopen\_nominations} option), the number of ballots whose
+ranking, as a position vector, is cast by no other voter, and the number
+of candidate pairs whose margin $|D_{ij} - D_{ji}|$ is at most two. In
+every election, all but at most two ballots are unique. A coercer who
+prescribed a ranking therefore identifies the voter on a published board
+with certainty, and a published count matrix confirms a prescribed
+preference on up to ten pairs per election. Our certificate publishes
+neither. Its witness paths reveal the direction, but not the margin, of
+$118$ of the $1050$ pairs, and they reveal nothing in 2016 and 2023
+(Section~\ref{sec:security}).
+
+\begin{table}[t]
+  \caption{The leak in Gentoo's council elections. ``Paths reveal'':
+  pairs whose head-to-head winner our certificate's witness paths reveal
+  (in parentheses, those with $|D_{ij}-D_{ji}| \le 2$). Scripts:
+  \rocqfile{bench/gentoo_leak.py} and \rocqfile{bench/gentoo_paths.py} over
+  the published master ballots in \rocqfile{bench/gentoo-votes}.}
+  \label{tab:leak}
+  \centering\scriptsize\setlength{\tabcolsep}{3pt}
+  \begin{tabular}{@{}lrrrrr@{}}
+    \toprule
+    election & $N$ & $m$ & unique rankings & $|D_{ij}-D_{ji}| \le 2$ & paths reveal \\
+    \midrule
+    201106 & 110 & 13 & 110 (100\%) & 4 of 78 & 11 (3) \\
+    201206 & 104 & 12 & 104 (100\%) & 5 of 66 & 8 (2) \\
+    201306 & 96 & 17 & 96 (100\%) & 6 of 136 & 20 (2) \\
+    201406 & 81 & 14 & 81 (100\%) & 4 of 91 & 10 (1) \\
+    201506 & 72 & 10 & 70 (97\%) & 4 of 45 & 2 (2) \\
+    201606 & 90 & 13 & 88 (98\%) & 3 of 78 & 0 (0) \\
+    201706 & 76 & 15 & 76 (100\%) & 4 of 105 & 13 (0) \\
+    201806 & 84 & 13 & 84 (100\%) & 7 of 78 & 16 (4) \\
+    201906 & 70 & 12 & 70 (100\%) & 9 of 66 & 15 (4) \\
+    202006 & 63 & 14 & 63 (100\%) & 10 of 91 & 12 (4) \\
+    202106 & 73 & 15 & 73 (100\%) & 7 of 105 & 4 (0) \\
+    202206 & 64 & 12 & 64 (100\%) & 2 of 66 & 7 (2) \\
+    202306 & 50 & 10 & 50 (100\%) & 1 of 45 & 0 (0) \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Ballot cost}\label{sec:eval:ballot}
+A ballot for $m$ candidates has $m + m^2$ ciphertexts and $m + 2m^2$
+proofs (Section~\ref{sec:ballot}): $2m(m+2)(2m+1)$ group elements and
+$m(2m+3) + m^2(4m+8)$ field elements in all, i.e.\ $512\,(m+2)(2m+1)m +
+32\,(4m^3 + 10m^2 + 3m)$ bytes at the 2048-bit Helios parameters.
+Table~\ref{tab:ballotcost} lists the sizes for $m$ in the range of the
+Gentoo elections, with the proving and verification times of the
+extracted OCaml.
+
+\begin{table}[t]
+  \caption{Ballot size and median time at the 2048-bit Helios parameters.
+  The batched prover's time is one of its three passes. Scripts:
+  \rocqfile[main.exe]{src/Executable/SchulzeBenchcode/main.ml} and
+  \rocqfile[simple.exe]{src/Executable/SchulzeBenchcode/simple.ml}.}
+  \label{tab:ballotcost}
+  \centering\scriptsize\setlength{\tabcolsep}{4pt}
+  \begin{tabular}{@{}rrrrrrr@{}}
+    \toprule
+    & \multicolumn{3}{c}{first ballot (\S\ref{sec:ballot})} & \multicolumn{3}{c}{batched ballot (\S\ref{sec:batched})} \\
+    \cmidrule(lr){2-4}\cmidrule(l){5-7}
+    $m$ & size & prove & verify & size & prove & verify \\
+    \midrule
+    3 & 59\,KB & 0.69\,s & 0.41\,s & 11\,KB & 0.03\,s & 0.04\,s \\
+    5 & 216\,KB & 2.9\,s & 1.6\,s & 22\,KB & 0.07\,s & 0.11\,s \\
+    7 & 531\,KB & 7.9\,s & 4.3\,s & 36\,KB & 0.12\,s & 0.20\,s \\
+    10 & 1.4\,MB & 21.9\,s & 11.9\,s & 67\,KB & 0.25\,s & 0.45\,s \\
+    13 & 2.9\,MB & 59\,s & 31\,s & 108\,KB & 0.41\,s & 0.81\,s \\
+    17 & 6.2\,MB & 130\,s & 68\,s & 180\,KB & 0.71\,s & 1.6\,s \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Tally cost}\label{sec:eval:tally}
+The certificate for $m$ candidates and $N$ accepted ballots has $m^2$
+re-encryptions with decryption proofs, $m^2$ encrypted defeats with
+$(N{+}1)$-branch range proofs and $(2N{+}1)$-branch defeat disjunctions,
+$m^2$ encrypted path strengths with range proofs, $m^3$ closure
+disjunctions of $2N{+}2$ branches, at most $m^2(m-1)$ edge proofs along
+the witness paths, and $m-1$ winner proofs (Section~\ref{sec:tally}).
+Table~\ref{tab:tallycost} gives its size and the trustees' and the
+verifier's time, as a function of $m$ at fixed $N$ and of $N$ at fixed
+$m$. A council election fills seven seats from the ranking. With our scheme
+the trustees certify the winner, remove it, and certify again on the
+same encrypted counts, so seven certificates on $m, m-1, \ldots$
+candidates replace Gentoo's seven passes. The certificate grows linearly
+in $N$ through the branch counts and cubically in $m$ through the closure
+disjunctions. The measurements of Table~\ref{tab:tallycost} fit this, at
+$7$--$14$\,ms per disjunction branch for the trustees (whose time
+includes decrypting the counts by a search up to $N$) and
+$3$--$4$\,ms for the verifier.
+
+\begin{table}[t]
+  \caption{Certificate size and time at the 2048-bit Helios parameters,
+  synthetic elections. Script: \rocqfile[Executable/SchulzeBenchcode/main.exe]{src/Executable/SchulzeBenchcode/main.ml}
+  $m$ $N$. Table~\ref{tab:gentoo} has the real elections.}
+  \label{tab:tallycost}
+  \centering\scriptsize\setlength{\tabcolsep}{3pt}
+  \begin{tabular}{@{}rrrrrr@{}}
+    \toprule
+    $m$ & $N$ & group el. & size & trustees & verifier \\
+    \midrule
+    3 & 5 & 1{,}278 & 360\,KB & 5.2\,s & 2.6\,s \\
+    3 & 20 & 4{,}338 & 1.2\,MB & 17\,s & 8.7\,s \\
+    5 & 50 & 40{,}848 & 11.5\,MB & 163\,s & 83\,s \\
+    7 & 100 & 190{,}376 & 53.6\,MB & 1{,}668\,s & 382\,s \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{The Gentoo council elections, end to end}\label{sec:eval:gentoo}
+We ran the thirteen council elections of Table~\ref{tab:leak} through
+the extracted code, starting from the published rankings. The client of
+Section~\ref{sec:ballot} (the first ballot) encrypts each voter's
+position vector under a credential-bound oracle and posts it to a board
+file. The verifier checks every ballot, replays the first ballot under
+another credential and checks that it is rejected, and aggregates. The
+trustees' prover then decrypts the counts and certifies the winner, and
+the verifier checks the certificate (\rocqfile[Executable/SchulzeGentoocode]{src/Executable/SchulzeGentoocode}, two programs so
+that an interrupted run loses nothing). We then ran the same elections
+through the batched ballot of Section~\ref{sec:batched}
+(\rocqfile[gentoo3.exe]{src/Executable/SchulzeGentoocode/gentoo3.ml}, voters and verifier in one process, since a
+ballot now takes seconds), with the same aggregation and certificate.
+Table~\ref{tab:gentoo} reports the medians per ballot for both ballots
+and the certificate times. In every election every ballot is accepted, the replayed ballot is
+rejected, the certificate verifies, and the certified winner is the
+Schulze winner of the published rankings, which is Gentoo's. The batched
+runs accept the same ballots and certify the same winners. The thirteen
+elections ran concurrently, one process each, on an $18$-core laptop that
+was also in interactive use, so the certificate times of
+Table~\ref{tab:gentoo} are wall-clock upper bounds. We re-ran the $2013$,
+$2015$, and $2023$ elections with processor-time measurement (the $2023$ one alone, the other two as a
+pair), and their rows report those runs (for $2023$ the trustees' $18$
+minutes and the verifier's $9$ minutes are within $3$\% of the
+wall-clock of a run on an idle machine). Ballot verification takes
+$12$\,s per ballot at $10$ candidates and $57$\,s at $17$. The
+certificate, whose branch counts grow with $N$ and whose proof count
+grows with $m^3$, takes the trustees $18$ minutes at $(m, N) = (10, 50)$,
+$25$ minutes at $(10, 72)$, and $144$ minutes at $(17, 96)$, and its
+verifier about half of that. With the batched ballot the voters' side of
+an election takes minutes: the three-pass client proves a
+ballot in $0.8$\,s at ten candidates and $2.9$\,s at seventeen, the
+verifier checks it in $0.5$ to $1.6$\,s, and the board files
+(decimal text) shrink from $175$\,MB--$1.5$\,GB to $8$--$43$\,MB. The certificate, which does not
+depend on the ballot design, then makes up the whole cost of the election.
+
+\begin{table}[t]
+  \caption{The Gentoo council elections at the 2048-bit Helios
+  parameters: median time per ballot, and certificate time. Times are
+  wall-clock upper bounds, except for 2013, 2015, and 2023 (processor
+  time). Script: \rocqfile{bench/gentoo_table.py}.}
+  \label{tab:gentoo}
+  \centering\scriptsize\setlength{\tabcolsep}{3pt}
+  \begin{tabular}{@{}lrrrrrrrr@{}}
+    \toprule
+    & & & \multicolumn{2}{c}{first} & \multicolumn{2}{c}{batched} & \multicolumn{2}{c}{certificate} \\
+    \cmidrule(lr){4-5}\cmidrule(lr){6-7}\cmidrule(l){8-9}
+    year & $m$ & $N$ & prove & verify & prove & verify & trustees & verifier \\
+    \midrule
+    2011 & 13 & 110 & 58\,s & 34\,s & 1.5\,s & 0.8\,s & 90\,min & 41\,min \\
+    2012 & 12 & 104 & 46\,s & 27\,s & 1.2\,s & 0.7\,s & 68\,min & 33\,min \\
+    2013 & 17 & 96 & 132\,s & 57\,s & 2.9\,s & 1.6\,s & 144\,min & 71\,min \\
+    2014 & 14 & 81 & 72\,s & 41\,s & 1.8\,s & 1.0\,s & 82\,min & 38\,min \\
+    2015 & 10 & 72 & 26\,s & 12\,s & 0.8\,s & 0.5\,s & 25\,min & 12\,min \\
+    2016 & 13 & 90 & 58\,s & 33\,s & 1.5\,s & 0.8\,s & 74\,min & 35\,min \\
+    2017 & 15 & 76 & 88\,s & 50\,s & 2.1\,s & 1.1\,s & 93\,min & 42\,min \\
+    2018 & 13 & 84 & 58\,s & 33\,s & 1.5\,s & 0.8\,s & 69\,min & 33\,min \\
+    2019 & 12 & 70 & 45\,s & 26\,s & 1.2\,s & 0.7\,s & 47\,min & 23\,min \\
+    2020 & 14 & 63 & 71\,s & 42\,s & 1.8\,s & 1.0\,s & 65\,min & 31\,min \\
+    2021 & 15 & 73 & 88\,s & 51\,s & 2.1\,s & 1.1\,s & 89\,min & 41\,min \\
+    2022 & 12 & 64 & 45\,s & 24\,s & 1.2\,s & 0.7\,s & 42\,min & 21\,min \\
+    2023 & 10 & 50 & 26\,s & 12\,s & 0.8\,s & 0.5\,s & 18\,min & 9\,min \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{The library as a test oracle}\label{sec:eval:oracle}
+The certified prover takes its randomness and witness as inputs, so it
+can produce proofs of false statements with correctly derived Fiat--Shamir
+challenges. On 1{,}715 honest, mutated, structural, and forged boards,
+Belenios's audit tool (\texttt{belenios-tool election verify}, release
+3.2.0) accepted 36 forged boards, each with one invalid ballot, and
+reported ``all checks passed'', because one line discarded the per-ballot check
+results. The maintainers fixed it the day after our report. Their web server
+was unaffected. A missing subgroup test in the mix-net shuffle
+verifier is still to be reported \TODO{report this finding}. Appendix~\ref{sec:belenios}
+gives the details.

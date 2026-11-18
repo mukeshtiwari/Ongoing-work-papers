@@ -1,0 +1,169 @@
+% Reused from PoPETS-2027/main.tex lines 679-845; moved to the appendix in the
+% S&P version (the Schulze scheme is the main case study).
+\section{Extracted Programs for Approval Voting and Helios}\label{app:programs}
+The library's first two applications, which the Schulze development of Sections~\ref{sec:schulze} and~\ref{sec:mech} builds on: a client--server system for approval voting, whose client is extracted to WebAssembly and whose server to OCaml from the same proofs, and a certified verifier for Helios elections, run on real IACR 2023 and 2024 bulletin-board data. The \texttt{count} state machine of the Schulze tally is the one introduced here.
+
+\subsection{Approval Voting}
+Approval voting is a voting method where each voter can approve any subset of candidates independently. 
+Unlike plurality voting where each voter selects exactly one candidate, approval voting allows voters to express 
+support for multiple candidates, resulting in fairer representation of voter preferences. Our formalisation 
+implements approval voting using ElGamal encryptions paired with OR-compositions of $\Sigma$-proofs to guarantee that 
+each vote is either 0 (not approved) or 1 (approved).  The frontend functions, shown in Listing~\ref{frontend_fun} in Appendix~\ref{appendix_listings}, realise the ballot-construction pipeline for approval voting. The function \texttt{\seqsplit{encrypt\_vote}} computes the ElGamal ciphertext $(g^r,\; g^m \cdot h^r)$ from generator $g$, public key $h$, vote value $m$, and randomness $r$. The function \texttt{\seqsplit{generate\_enc\_proof}} then constructs a two-branch $\Sigma$-proof that the ciphertext encrypts either zero ($0$) or a non-zero value: it performs a case split with \texttt{Fdec} $m$ \texttt{zero}, places the real witness in the corresponding branch index (\texttt{Fin.F1} when $m=0$, otherwise \texttt{Fin.FS} \texttt{Fin.F1}), and simulates the other branch. Finally, \texttt{\seqsplit{encrypt\_vote\_and\_generate\_enc\_proof}} composes both steps and returns the ciphertext together with its proof as a single object for verification. Ideally, for the non-zero case a voter should encrypt $1$ but it runs on the voter's computer so the voter can encrypt any value and produce a zero-knowledge proof but the verification function running at the backend (server) will reject the proof, except for some negligible probability. More precisely, theorem \texttt{\seqsplit{vote\_proof\_invalid\_reject}} shows that for invalid votes $m \neq 0,1$, verification returns false whenever the generator $g$ is not the group identity and the simulated sub-challenge differs from the verifier's challenge ($c_1 \neq c$). The companion theorem \texttt{\seqsplit{vote\_proof\_invalid\_accept}} captures the exceptional case: if the prover can predict the verifier challenge ($c_1 = c$), an invalid transcript can still be accepted. Together, these results characterise the standard $\Sigma$-protocol soundness boundary and explain why unpredictable challenges are essential \cite{10.1007/978-3-642-34961-4_38,dao2023weak}. 
+
+Finally, the function \texttt{\seqsplit{encrypt\_ballot\_and\_generate\_enc\_proof}} extends vote encryption to the entire ballot by vectorising across all $n$ candidates. Each candidate 
+produces a tuple $(C_i, \pi_i)$ where $C_i$ is the encrypted vote and $\pi_i$ is the accompanying $\Sigma$-proof. A complete ballot is thus a vector of $n$ such tuples. A ballot additionally carries an \emph{overall proof}. The homomorphic product of its $n$ ciphertexts (\texttt{\seqsplit{ballot\_product}}) encrypts the sum of the votes, and \texttt{\seqsplit{generate\_overall\_proof}} is the disjunctive encryption proof of Section~\ref{schn_proof} on this product with the message list $g^0, g^1, \ldots, g^n$ (\texttt{powers g n}), proved at the branch equal to the number of approvals with the sum of the encryption randomness as witness. This is the proof Helios attaches to a question with a maximum number of approvals; here the maximum is $n$, and since \texttt{\seqsplit{verify\_overall\_proof}} takes the message list as a parameter, a smaller maximum $k$ is the same function with \texttt{powers g k}. The function \texttt{\seqsplit{verify\_ballot}} checks the $n$ individual proofs and the overall proof. Theorem \texttt{\seqsplit{ballot\_with\_overall\_proof\_valid}} shows that a ballot of $0/1$ votes is accepted, and \texttt{\seqsplit{vote\_proof\_sound}} and \texttt{\seqsplit{overall\_proof\_sound}} (Listing~\ref{frontend_fun}) are the special soundness statements at the ballot level: two accepting proofs with the same announcement and different challenges show that a ciphertext encrypts $0$ or $1$, respectively that the ballot product encrypts $g^m$ with $m \le n$, i.e., at most $n$ approvals. Both are instances of the special soundness of the disjunctive encryption proof. We extract all frontend functions into WebAssembly. The related Rocq proofs can be accessed from the \href{https://anonymous.4open.science/r/SigmaProtocol-EBA5/src/Frontend/Approval.v}{\textcolor{blue}{Approval.v}} file and the corresponding WebAssembly file from \href{https://anonymous.4open.science/r/SigmaProtocol-EBA5/src/Wasm/approval.wasm}{\textcolor{blue}{approval.wasm}}.
+
+
+
+
+
+\textbf{Homomorphic Tallying}: Tallying is specified as an inductive state machine \texttt{count}, parameterised 
+over another inductive datatype \texttt{state}, similar to \cite{10.1007/978-3-319-66107-0_26}. The \texttt{state} datatype has two constructors, \texttt{partial} and \texttt{finished}, that signifies that the counting of ballots is still ongoing or finished. More precisely, \texttt{partial} \texttt{us} \texttt{vbs} \texttt{inbs} \texttt{ms}: the counting is in progress, with all seen ballots \texttt{us}, valid ballots \texttt{vbs}, invalid ballots \texttt{inbs}, and running encrypted tally \texttt{ms}; and \texttt{finished} \texttt{us} \texttt{vbs} \texttt{inbs} \texttt{pt} \texttt{b}: the computation is finalised and returns the plaintext tally vector \texttt{pt} together with a Boolean \texttt{b} recording whether \texttt{pt} was checked against the decrypted tally.
+
+The judgment \texttt{count : state -> Type} defines legal counting traces through four rules: 
+(i) \textbf{\texttt{ax}} (initialisation): starts from empty ballot lists and an identity tally vector \texttt{ms} $= (1_G,1_G),\ldots,(1_G,1_G)$. This means no vote has contributed yet; 
+(ii) \textbf{\texttt{cvalid}} (accept valid ballot): if a new ballot \texttt{u} satisfies \texttt{\seqsplit{verify\_ballot}} \texttt{u = true}, i.e., its $n$ individual proofs and its overall proof are accepted, then \texttt{u} is moved into \texttt{vbs} (set of valid ballots), and the encrypted tally is updated homomorphically: \texttt{nms = \seqsplit{mul\_encrypted\_ballots}} \texttt{ms} (\texttt{map fst u}). Intuitively, ciphertext components are multiplied coordinate-wise, so exponents (hence votes) add; 
+(iii) \textbf{\texttt{cinvalid}} (reject invalid ballot): if \texttt{\seqsplit{verify\_ballot}} \texttt{u = false}, then \texttt{u} is appended to \texttt{inbs} (set of invalid ballots), while the running (encrypted) tally \texttt{ms} remains unchanged; and 
+(iv) \textbf{\texttt{cfinish}} (finalisation): after all ballots are processed, the decryption outputs \texttt{ds} and the decryption proofs \texttt{pf} are checked. The rule requires acceptance of the decryption proofs, \texttt{\seqsplit{decryption\_proof\_accepting\_conversations\_vector}} \texttt{ms} \texttt{ds} \texttt{pf = true}. The plaintext counts \texttt{pt} are supplied by the caller (a discrete-logarithm search in the extracted driver) and are not trusted: the rule decides $g^{pt_i}=ds_i$ for every candidate with \texttt{Gdec} and records the conjunction as the Boolean \texttt{b} of the final state \texttt{finished} \texttt{us} \texttt{vbs} \texttt{inbs} \texttt{pt} \texttt{b}. Theorem \texttt{\seqsplit{finished\_true\_correct}} shows that a certificate with \texttt{b = true} yields $g^{pt_i}=ds_i$ for every candidate together with accepted decryption proofs, so the tally needs no assumption about the search.
+
+The executable function \texttt{\seqsplit{compute\_final\_tally}} implements the first phase (classification and encrypted aggregation) by recursion on the ballot list. For each ballot, it branches on \texttt{\seqsplit{verify\_ballot}}: the true branch applies \texttt{cvalid}, the false branch applies \texttt{cinvalid}. It returns \texttt{(vbs,inbs,ms)} together with the invariant \texttt{Permutation bs (vbs ++ inbs)}, ensuring that every input ballot is accounted for exactly once. Finally, the function \texttt{\seqsplit{compute\_final\_count}} then derives the final plaintext tally by decrypting aggregate ciphertexts with secret key $x$ to obtain \texttt{ds}, computing \texttt{pt} by pointwise discrete-log search relative to generator $g$, checking it against \texttt{ds}, and concludes \texttt{count (finished bs vbs inbs pt b)} via \texttt{cfinish}. Hence, the formal counting pipeline is: \emph{verify each ballot} $\to$ \emph{homomorphically aggregate valid ciphertexts} $\to$ \emph{verify decryption} $\to$ \emph{extract plaintext counts}, with explicit proof obligations at each step. The source code for this section can be accessed in the \href{https://anonymous.4open.science/r/SigmaProtocol-EBA5/src/Backend/Tally.v}{\textcolor{blue}{Tally.v}} file.
+
+
+\subsection{Helios Verifier}
+To demonstrate the practical applicability of our formalisation, we have developed a certified verifier for 
+the Helios voting system that processes real-world election data from the IACR elections. Helios is a 
+widely-deployed open-source internet voting system that implements end-to-end verifiable elections using 
+cryptographic proofs. Our verifier validates the complete election tally, including ballot verification, ciphertext aggregation, and decryption correctness using formally verified proofs 
+extracted as OCaml code. 
+
+The election verification process follows a very similar approach described in the 
+previous section. We have an inductive datatype \texttt{count}, index by \texttt{state}. 
+The \texttt{count} and \texttt{state} are similar to previously defined, except the fourth constructor \texttt{finish} is 
+slightly different. The constructor \textbf{finish}: after all ballots are processed, the verifier performs end-to-end 
+verification checks: (i) Decryption verification: Each of the $m$ talliers has published a decryption factor $d_i = \alpha^{s_i}$ 
+(where $\alpha$ is the first component of the final ciphertext and $s_i$ is their secret key). The verifier 
+checks the decryption factor's validity using Chaum-Pedersen proofs that prove the discrete log relation 
+$\log_g(y_i) = \log_\alpha(d_i)$ (same exponent used for both); (ii) Plaintext verification: The plaintext tally is computed from decryption factors and checked for 
+consistency, i.e., for each candidate position, the prover must verify that $g^{\text{plaintext}} = \text{decrypted value}$; (iii) Proof of knowledge (POK) checks: Each tallier has published a Schnorr proof of knowledge of their 
+secret key, which is verified to ensure key ownership; and (iv) Public key consistency: The verifier confirms that the product of all talliers' public keys equals 
+the election's public key $h = \prod_i y_i$, ensuring no key material was substituted.  The function \texttt{compute\_final\_count} is the top-level certified
+verifier. Its type states that for a list of ballots $\mathit{bs}$,
+a list of talliers $\mathit{ts}$, and a published plaintext
+tally $\mathit{pt}$, one can always compute a Boolean $\mathit{bfinal}$ together
+with a partition of $\mathit{bs}$ into valid ballots $\mathit{vbs}$ and invalid
+ballots $\mathit{inbs}$, and---crucially---a term of type
+$\texttt{count}~(\texttt{finished}~\mathit{bs}~\mathit{vbs}~\mathit{inbs}~\mathit{ts}~\mathit{pt}~\mathit{bfinal})$.
+Because \texttt{count} is an inductive datatype whose constructors encode all
+verification rules, inhabiting this type is itself a machine-checked
+certificate of the entire end-to-end verification. The related Rocq proof can be accessed in the \href{https://anonymous.4open.science/r/SigmaProtocol-EBA5/src/Backend/HeliosTally.v}{\textcolor{blue}{HeliosTally.v}} file.
+
+The generic function \texttt{compute\_final\_count} is parameterised over an
+arbitrary field $F$, group $G$, and all associated operations.
+The function \texttt{compute\_final\_count\_ins} fixes every one of these
+parameters to the concrete Helios cryptographic setting: the field $F$ is
+instantiated to $\mathbb{Z}_q$ (via the \texttt{Zpfield} module), the group
+$G$ is the Schnorr group $\mathbb{Z}^*_p$ of order $q$ (via the
+\texttt{Schnorr\_group} module), and the group operations---identity,
+inverse, multiplication, and exponentiation---are the corresponding
+modular-arithmetic functions \texttt{Schnorr.one}, \texttt{\seqsplit{inv\_schnorr\_group}},
+\texttt{\seqsplit{mul\_schnorr\_group}}, and \texttt{pow}.
+The generator $g$ and the election public key $h$
+are supplied as further arguments, together with the ballot list $\mathit{bs}$,
+the tallier list $\mathit{ts}$, and the published plaintext tally
+$\mathit{pt}$.
+The body of \texttt{\seqsplit{compute\_final\_count\_ins}} is a single call to
+\texttt{\seqsplit{compute\_final\_count}} with all arguments filled in; the result is a
+term of the fully instantiated type
+$\texttt{count}~(\texttt{finished}~\mathit{bs}~\mathit{vbs}~\mathit{inbs}~\mathit{ts}~\mathit{pt}~\mathit{bfinal})$,
+which is a machine-checked certificate that the election tally is correct. The related Rocq code can be accessed from  the 
+\href{https://anonymous.4open.science/r/SigmaProtocol-EBA5/src/Examples/HeliosTallyIns.v}{\textcolor{blue}{HeliosTallyIns.v}} file.
+
+
+Finally, the toplevel \texttt{main.ml} file ties together the parser
+and the certified verifier (extracted from Rocq proofs) into a single end-to-end pipeline.
+The program reads election data from standard input, which is structured
+in three sections: the list of voter ballots
+(\texttt{bs}), the list of trustees (\texttt{us}), and the published
+plaintext tally (\texttt{rs}).
+The parser reconstructs each ballot as a tuple containing the cast timestamp,
+a vector of ElGamal ciphertexts $(\alpha_i, \beta_i)$, a vector of $\Sigma$-proofs (one per candidate, certifying that the plaintext is $0$ or $1$),
+and metadata strings (election hash, voter hash, etc.).
+Each trustee is parsed into a tuple containing the decryption factor vector,
+the Chaum-Pedersen decryption proof vector, the Schnorr proof of knowledge,
+and the trustee's public key $(g, p, q, y_i)$. Once parsing is complete, \texttt{compute\_final\_count\_ins} is invoked
+with the concrete Helios parameters and the three parsed inputs
+\texttt{bs}, \texttt{us}, \texttt{rs}. The certified verifier itself is
+parametric in the number of candidates, the number of talliers, and the
+election public key; the driver selects them from the election year on the
+command line ($n = 6$ and \texttt{h2023} for IACR 2023, $n = 7$ and
+\texttt{h2024} for IACR 2024, with $m = 2$ additional talliers in both years).
+The return value is a nested \texttt{existT}---the Curry-Howard
+image of the $\Sigma$-type---which is pattern-matched to recover the
+Boolean verdict \texttt{bfinal}, the lists of valid and invalid ballots
+\texttt{vbs} and \texttt{inbs}, and, crucially, a \texttt{count} term
+that is a machine-checked certificate of the entire verification.
+The program then prints the full certificate trace by
+recursively deconstructing the \texttt{count}, displaying for
+each ballot whether it was valid or invalid and reporting the four individual Boolean checks---decryption proof
+validity, plaintext consistency, proof-of-knowledge validity, and public-key product consistency.
+
+\textbf{Recomputing the challenges}: The certified verifier checks the equations of the interactive protocols; Helios makes them non-interactive by deriving each challenge with SHA-1 from the announcement, and a verifier that took the challenges from the bulletin board would accept any simulated transcript. Our parser therefore recomputes Helios's challenge (SHA-1 over the decimal announcements joined by commas, modulo $q$) for every ballot proof, decryption proof and proof of knowledge, checks that group elements lie in the order-$q$ subgroup and field elements are below $q$, and only then calls the certified verifier. The artefact includes a script that forges an IACR 2024 ballot encrypting $5$ in a $0/1$ slot with chosen sub-challenges, so that the verification equations hold; the verifier rejects it (931 valid, 1 invalid). The approval-voting tally recomputes its challenges likewise (with SHAKE-256), and theorem \texttt{\seqsplit{ballot\_commitment\_announcement}} shows that the client hashes exactly the announcements it sends; proving it exposed a bug in an earlier client, which hashed a commitment at the wrong branch for $0$ votes, invisible to any verifier that trusted the stored challenges.
+
+The verifier has successfully validated real IACR 2024 and IACR 2023 election data, demonstrating practical deployment 
+of formal verification in privacy-preserving voting systems. The end-to-end verification provides strong 
+cryptographic assurance: if any ballot is modified, any decryption factor is forged, or any tally is 
+changed, the verifier will detect the corruption. The related source code can accessed 
+from the \href{https://anonymous.4open.science/r/SigmaProtocol-EBA5/src/Executable/HeliosVerifiercode/main.ml}{\textcolor{blue}{main.ml}} file.
+
+
+\textbf{Primality of $p$ and $q$}:
+The two large primes used in the Helios parameters are a 256-bit prime~$q$
+and a 2048-bit prime~$p = kq + 1$.
+Their primality is established inside Rocq using the
+\textsc{Coqprime}~\cite{thery2007primality} library.  For $q$, the proof can be accessed from the \href{https://anonymous.4open.science/r/SigmaProtocol-EBA5/src/Examples/primeQ.v}{\textcolor{blue}{primeQ.v}} file and 
+for $p$, the proof can be accessed from \href{https://anonymous.4open.science/r/SigmaProtocol-EBA5/src/Examples/primeP.v}{\textcolor{blue}{primeP.v}} file.  
+
+
+
+  
+
+
+\subsection{Performance Evaluation}\label{perf_eval}
+To assess whether the extracted code is practical, we measure both ends of the pipeline: ballot construction by the voting client and the Helios verifier on real election data. All measurements were taken on an Apple M3 Pro laptop (12 cores, 36\,GB RAM). The certified code is extracted to OCaml~5.4.1 and performs arbitrary-precision arithmetic through \texttt{zarith} (backed by GMP); the JavaScript baseline runs the exact cryptographic scripts served by the deployed Helios voting booth (\texttt{jsbn} big-integer arithmetic) under Node.js~26 with the same 2048-bit election parameters. We report two further baselines: the booth's computation reimplemented, operation for operation, with JavaScript's native \texttt{BigInt} under the same runtime, and the complete IACR verification re-run with Helios's own Python cryptographic code (\texttt{helios/crypto/algs.py}, imported verbatim), performing exactly the same checks. We also compile the extracted OCaml client to JavaScript with \texttt{js\_of\_ocaml} (big integers through \texttt{zarith\_stubs\_js}, hashing through a pure-OCaml SHA-3), which runs unmodified in a browser; we measure it under the same Node.js runtime as the JavaScript baselines.
+
+\begin{table}
+  \caption{Performance of the certified code at the Helios parameters (2048-bit $p$, 256-bit $q$). Client-side numbers are for a single approval ballot with $n = 7$ candidates; verifier numbers are for complete IACR election data sets.}
+  \label{tab:perf}
+  \footnotesize
+  \begin{tabularx}{\columnwidth}{@{}>{\raggedright\arraybackslash}Xlr@{}}
+    \toprule
+    Operation & Input & Time\\
+    \midrule
+    Ballot encryption + proofs (certified OCaml) & $n = 7$ & 62\,ms\\
+    Ballot encryption + proofs (native BigInt JS) & $n = 7$ & 67\,ms\\
+    Ballot encryption + proofs (certified, js\_of\_ocaml) & $n = 7$ & 271\,ms\\
+    Ballot encryption + proofs (Helios booth JS) & $n = 7$ & 334\,ms\\
+    Ballot encryption + proofs (certified CakeML) & $n = 7$ & 49.3\,min\\
+    Ballot verification (certified OCaml) & $n = 7$ & 49\,ms\\
+    Ballot verification (native BigInt JS) & $n = 7$ & 80\,ms\\
+    Ballot verification (certified, js\_of\_ocaml) & $n = 7$ & 171\,ms\\
+    Ballot verification (Helios booth JS) & $n = 7$ & 385\,ms\\
+    Helios verifier, IACR 2023 (certified OCaml) & 848 ballots & 39.2\,s\\
+    Helios verifier, IACR 2023 (Helios Python) & 848 ballots & 222.8\,s\\
+    Helios verifier, IACR 2024 (certified OCaml) & 932 ballots & 50.8\,s\\
+    Helios verifier, IACR 2024 (Helios Python) & 932 ballots & 288.8\,s\\
+    %% No WebAssembly row: at 2048-bit parameters the current verified
+    %% backend runs out of linear memory; reduced-parameter WebAssembly
+    %% results are reported in the text of this section (see also
+    %% bench/README.md in the artifact).
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+Table~\ref{tab:perf} summarises the results. Encrypting a seven-candidate approval ballot and generating all seven disjunctive encryption proofs takes 62\,ms with our certified code, more than five times faster than the hand-written JavaScript shipped with the deployed Helios voting booth (334\,ms) on identical parameters. Certified code is therefore not synonymous with slow code: although our only optimisation is an efficient integer representation, the extracted OCaml outperforms a widely deployed hand-written implementation while carrying machine-checked correctness guarantees. Since \texttt{jsbn} predates native \texttt{BigInt}, our \texttt{BigInt} reimplementation controls for the big-integer library: it closes most of the gap (67\,ms proving, 80\,ms verifying) yet still does not overtake the certified OCaml code, so the comparison does not hinge on a weak baseline. The \texttt{js\_of\_ocaml} build of the same certified client proves a ballot in 271\,ms and verifies one in 171\,ms at the real 2048-bit parameters: slower than native OCaml, but still faster than the \texttt{jsbn} JavaScript the Helios booth ships, so the certified client can run in the voter's browser today at real parameters. We do not expect to match hand-optimised cryptographic libraries such as HACL$^{*}$~\cite{10.1145/3133956.3134043}, which occupy a different point in the assurance--performance space. Our certified verifier checks the complete IACR 2023 election (848 ballots, six candidates) in 39 seconds and the IACR 2024 election (932 ballots, seven candidates) in 51 seconds, verifying every ballot's encryption proofs, homomorphically aggregating the valid ballots, and checking the trustees' decryption proofs and proofs of knowledge. Helios's own Python cryptographic code takes 222.8 and 288.8 seconds for the same checks, agreeing with our verifier on every verdict; the certified verifier is thus about $5.5\times$ faster than the reference implementation's own code.
+
+The browser deployment therefore rests on the \texttt{js\_of\_ocaml} build; the WebAssembly path through the verified CertiRocq compiler currently runs only at reduced parameters. On that path, we compiled the same certified ballot-construction and verification functions with CertiRocq. The verified backend computes on Rocq's binary-represented integers without garbage collection, so memory, not speed, is the binding constraint: at the 2048-bit Helios parameters a single modular exponentiation already exhausts the 2\,GB WebAssembly address space. Running the same fixed ballot over scaled-down Schnorr groups shows the compiled client is functional and locates the limit: at a 64-bit modulus the full ballot completes in 0.53\,s (147\,MB) and the WebAssembly-compiled verifier accepts the WebAssembly-produced ballot; at 128 bits it completes in 13.1\,s (1.23\,GB); at 256 bits a single vote completes but the full ballot runs out of memory. 
+
+Finally, we compiled the same certified ballot-construction term through a third pipeline: the Peregrine CakeML backend\footnote{\url{https://github.com/peregrine-project/cakeml-backend}} combined with the verified CakeML compiler~\cite{10.1145/2535838.2535841}. This is the strongest assurance point of our deployment paths: verified erasure, a backend accompanied by correctness proofs, and a fully verified compiler down to ARM64 machine code, with no unverified extraction and no unverified compiler anywhere in the chain. Like the WebAssembly backend, it computes on constructor-represented integers, but native code and a garbage collector let the computation complete: the full seven-candidate ballot takes 49.3 minutes (Table~\ref{tab:perf}). The pipelines thus chart the current assurance--performance trade-off for certified cryptographic code: unverified extraction with GMP-backed arithmetic is fast, natively and through \texttt{js\_of\_ocaml}; fully verified compilation runs but is four to five orders of magnitude slower, and we suspect the gap is attributable entirely to integer representation. 
+
+

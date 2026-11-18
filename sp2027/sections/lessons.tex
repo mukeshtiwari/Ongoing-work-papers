@@ -1,0 +1,45 @@
+\section{Lessons: Wiring Is the Trusted Base}\label{sec:lessons}
+The theorems of Section~\ref{sec:mech} speak about what the certified
+verifier checks; what reaches it, and about which values, is decided by
+unverified code, and every discrepancy we have found between a certified
+pipeline and a deployed one, in Belenios (Section~\ref{sec:belenios}) and
+in our own earlier verifiers, lay in that code rather than in a
+verification equation. Three parts of the boundary carry the security of
+the Schulze scheme.
+
+\paragraph{The decoder}
+Ballot soundness is a theorem about elements of the group type. A decoder
+that admits a ciphertext component outside the order-$q$ subgroup, as
+Belenios's shuffle verifier does, hands the certified code an input about
+which no theorem speaks. The Schulze verifier's decoder therefore checks
+the order of every group element and the range of every field element
+before anything reaches the certified functions; this check is the first
+candidate for verification, since a decoder is a parser with a simple
+specification.
+
+\paragraph{The wiring}
+Two decisions outside the theorems carry the security of the scheme. The
+verifier must \emph{derive} the $\delta$ ciphertexts from the position
+ciphertexts and never accept them as inputs (Section~\ref{sec:ballot}); a
+driver that read $\mathrm{Enc}(\delta_{ij})$ from the ballot would verify
+every proof and count a ballot twice. And the Fiat--Shamir challenge of a
+ballot must bind the voter's identity, or a ballot can be replayed under
+another credential; the mechanised challenge covers the ciphertexts and
+announcements, and the identity is the driver's responsibility
+\TODO{implement and test}. Both are tested the way we tested Belenios:
+the certified prover, which takes its witness and randomness as inputs,
+produces the double-counting ballot and the replayed ballot, and the
+extracted verifier must reject them. Wiring is protocol logic that no
+current formalisation covers end to end; the \texttt{count} judgement of
+Section~\ref{sec:mech} covers the aggregation and the final check, and
+extending it to the derivation of the statements each proof is about is
+where we would put the next proof.
+
+\paragraph{The challenge closures}
+The non-interactive theorems take the hash as a parameter. A closure that
+hashes the wrong announcement is invisible to a verifier that trusts the
+stored challenges and visible only to one that recomputes them, which the
+Schulze verifier does; proving that the client hashes exactly the
+announcements it sends (\texttt{nizk\_ballot\_valid} is stated with the
+challenge equal to the hash of the transcript) is what makes the
+recomputation sound.

@@ -1,0 +1,331 @@
+% Reused from PoPETS-2027/main.tex lines 952-1281 (unchanged except where marked SP).
+\section{Rocq Listings}\label{appendix_listings}
+This appendix collects, in order of appearance, the Rocq listings referenced from the main body of the paper.
+
+\begin{lstlisting}[frame=single, language=Coq, caption={Or-$\Sigma$-Protocol},
+label={or_proof},captionpos=t, basicstyle=\ttfamily\scriptsize,
+abovecaptionskip=-\medskipamount]
+Definition generalised_construct_or_conversations_schnorr {n :
+  nat} 
+  (rindex : Fin.t (2 + n)) (x : F) (gs hs : Vector.t G (2 + n))
+  (uscs : Vector.t F ((2 + n) + (1 + n))) (c : F) : 
+  @sigma_proto F G (2 + n) (1 + (2 + n)) (2 + n).
+Proof. (* proof terms omitted. *) Defined.
+
+Definition generalised_construct_or_conversations_simulator {n
+  : nat} 
+  (gs hs : Vector.t G (2 + n)) (uscs : Vector.t F ((2 + n) +
+    (1 + n)))  
+  (c : F) :  @sigma_proto F G (2 + n) (1 + (2 + n)) (2 + n).
+Proof. (* proof terms omitted. *) Defined.
+
+(* schnorr OR distribution *)
+Definition generalised_or_schnorr_distribution  
+  {n : nat} (lf : list F) (Hlfn : lf <> List.nil) 
+  (rindex : Fin.t (2 + n)) (x : F) (gs hs : Vector.t G (2 +
+    n)) (c : F) : 
+  dist (@sigma_proto F G (2 + n) (1 + (2 + n)) (2 + n)) := 
+  uscs <- repeat_dist_ntimes_vector 
+    (uniform_with_replacement lf Hlfn) ((2 + n) + (1 + n)) ;;
+  Ret (generalised_construct_or_conversations_schnorr 
+    rindex x gs hs uscs c).
+
+(* simulator distribution *)
+Definition generalised_or_simulator_distribution  
+  {n : nat} (lf : list F) (Hlfn : lf <> List.nil) 
+  (gs hs : Vector.t G (2 + n)) (c : F) : 
+  dist (@sigma_proto F G (2 + n) (1 + (2 + n)) (2 + n)) :=
+  usrs <- repeat_dist_ntimes_vector 
+    (uniform_with_replacement lf Hlfn) ((2 + n) + (1 + n)) ;;
+  Ret (generalised_construct_or_conversations_simulator gs hs
+    usrs c).
+
+(* Information theoretic zero-knowledge: the two 
+   distributions are permutations of each other *)
+Theorem generalised_or_special_honest_verifier_zkp_perm {n :
+  nat} 
+  (x : F) (gs hs : Vector.t G (2 + n)) (rindex : Fin.t (2 +
+    n)) 
+  (R : hs[@rindex] = gs[@rindex] ^ x) :
+  forall (lf : list F) (Hlfn : lf <> List.nil) (c : F),
+  List.NoDup lf -> (forall y : F, List.In y lf) ->
+  Permutation 
+    (generalised_or_schnorr_distribution lf Hlfn rindex x gs
+      hs c)
+    (generalised_or_simulator_distribution lf Hlfn gs hs c).
+Proof. (* proof terms omitted *) Qed.
+\end{lstlisting}
+
+\begin{lstlisting}[frame=single, language=Coq, caption={Witness Indistinguishability},
+label={wit_ind},captionpos=t, basicstyle=\ttfamily\scriptsize,
+abovecaptionskip=-\medskipamount]
+Theorem generalised_okamoto_witness_indistinguishable {n :
+  nat} :
+  forall (gs : Vector.t G (2 + n)) (h : G) (xs1 xs2 : Vector.t
+    F (2 + n)),
+  (* Both witnesses produce the same public key h *)
+  h = generalised_okamoto_commitment gs xs1 ->
+  h = generalised_okamoto_commitment gs xs2 ->
+  (* For every conversation (a, c, rs) from xs1, there exists
+    unique us' 
+    such that the same conversation is produced by xs2 *)
+  forall (us : Vector.t F (2 + n)) (a : G) (c : F) (rs :
+    Vector.t F (2 + n)),
+  ([a]; [c]; rs) = generalised_okamoto_real_protocol xs1 gs h
+    us c ->
+  exists! us' : Vector.t F (2 + n),
+    ([a]; [c]; rs) = generalised_okamoto_real_protocol xs2 gs
+      h us' c.
+Proof. (* proof terms omitted *) Qed.
+\end{lstlisting}
+
+\begin{lstlisting}[frame=single, language=Coq, caption={Neq $\Sigma$ Protocol},
+label={neq_special_sound},captionpos=t, basicstyle=\ttfamily\scriptsize,
+abovecaptionskip=-\medskipamount]
+(* size of proofs is O(n^2) for NEQ if we have n statements.
+  *) 
+Definition
+  generalised_construct_neq_conversations_real_transcript {n :
+    nat} : 
+  Vector.t F (2 + n) -> Vector.t G (2 + n) -> Vector.t G (2 +
+    n) -> 
+  Vector.t F ((2 + n) + ((2 + n) * (1 + n))) -> F ->
+  @sigma_proto F G ((2 + n) + Nat.div ((2 + n) * (1 + n)) 2) 1
+    ((2 + n) + (2 + n) * (1 + n)).
+Proof. intros xs gs hs us c. (* terms omitted *) Defined. 
+
+Theorem generalised_neq_accepting_conversations_soundness :
+  forall (n : nat) (a : Vector.t G (2 + n + (2 + n) * (1 + n)
+    / 2)) 
+  (c1 c2 : F) (rs1 rs2 : Vector.t F (2 + n + (2 + n) * (1 +
+    n))) 
+  (gs hs : Vector.t G (2 + n)), [c1] <> [c2] ->
+  generalised_neq_accepting_conversations gs hs (a; [c1]; rs1)
+    = true ->
+  generalised_neq_accepting_conversations gs hs (a; [c2]; rs2)
+    = true ->
+  exists (xs : Vector.t F (2 + n)), 
+  (forall (i : Fin.t (2 + n)), hs[@i] = gs[@i] ^ xs[@i]) /\
+  ((forall (i j : Fin.t (2 + n)), i <> j -> xs[@i] <> xs[@j])
+    \/
+  (exists (i j : Fin.t (2 + n)), i <> j /\ 
+  ((exists (alpha : F), gs[@j] = gs[@i] ^ alpha) \/ 
+  gs[@i] = gid \/ gs[@j] = gid))).
+Proof. (* proof terms omitted *) Qed.
+\end{lstlisting}
+
+\begin{lstlisting}[frame=single, language=Coq, caption={Rocq Encoding of the Schnorr Group},
+  label={group_def},captionpos=t, basicstyle=\ttfamily\scriptsize,
+  abovecaptionskip=-\medskipamount]
+Module Schnorr.
+Section SchnorrGroup. 
+  Context {k p q : Z} {Hk : p = k * q + 1}
+    {Hp : prime p} {Hq : prime q}.
+
+  Record Schnorr_group := mk_schnorr 
+    {v : Z; Ha : 0 < v < p; Hb : (Zpow_mod v q p = 1)}.
+
+  (* u ^ (p - 2) is inverse of u *)
+  Definition inv_schnorr_group (u : Schnorr_group) :
+    Schnorr_group.
+    refine(match u with 
+      | mk_schnorr au Hu Hv => mk_schnorr
+          (Z.of_N (Npow_mod (Z.to_N au) (Z.to_N (p - 2))
+            (Z.to_N p)))
+          (@inv_schnorr_group_subproof_first au Hu)
+          (inv_schnorr_group_subproof_second au Hu Hv)
+      end).
+  Defined.
+
+  (* Schnorr is a commutative Group *)
+  Global Instance schnorr_comm : @commutative_group 
+    Schnorr_group (@eq Schnorr_group) 
+    mul_schnorr_group one inv_schnorr_group.
+End SchnorrGroup.
+End Schnorr.
+\end{lstlisting}
+
+\begin{lstlisting}[frame=single, language=Coq, caption={Rocq Encoding of Prime Field},
+  label={field_def},captionpos=t, basicstyle=\ttfamily\scriptsize,
+  abovecaptionskip=-\medskipamount]
+(* Prime Field *)
+Module Zpfield.
+Section ZpField.
+  Context {p : Z} {Hp : prime p}.
+
+  Record Zp := mk_zp {v : Z; Hv : Z.modulo v p = v}.
+
+  Global Instance zp_field : @field Zp (@eq Zp) zero 
+    one zp_opp zp_add zp_sub zp_mul zp_inv zp_div.
+End ZpField. 
+End Zpfield.
+\end{lstlisting}
+
+\begin{lstlisting}[frame=single, language=Coq, caption={Vector Space Instantiation},
+  label={vec_space},captionpos=t, basicstyle=\ttfamily\scriptsize,
+  abovecaptionskip=-\medskipamount]
+Definition pow (g : @Schnorr.Schnorr_group p q) 
+  (y : @Zpfield.Zp q) : @Schnorr.Schnorr_group p q.
+  refine 
+    match g, y with 
+    | Schnorr.mk_schnorr gt Hgta Hgtb, Zpfield.mk_zp yt Hyt => 
+        Schnorr.mk_schnorr  
+          (Z.of_N (Npow_mod (Z.to_N gt) (Z.to_N yt) (Z.to_N
+            p))) 
+          (pow_subproof_first gt yt Hgta Hyt)
+          (pow_subproof_second _ _  Hyt Hgta Hgtb)
+    end.
+Defined.
+
+Global Instance pow_vspace : 
+  @vector_space 
+    (* Field *)
+    (@Zpfield.Zp q) (@eq (@Zpfield.Zp q))
+    (@Zpfield.zero q Hq) (@Zpfield.one q Hq)
+    (@Zpfield.zp_add q) (@Zpfield.zp_mul q)
+    (@Zpfield.zp_sub q) (@Zpfield.zp_div q)
+    (@Zpfield.zp_opp q Hq) (@Zpfield.zp_inv q)
+    (* Vector *)
+    (@Schnorr.Schnorr_group p q) (@eq (@Schnorr.Schnorr_group
+      p q))
+    (@Schnorr.one p q Hp Hq) 
+    (@Schnorr.inv_schnorr_group k p q Hk Hp Hq)
+    (@Schnorr.mul_schnorr_group p q Hp Hq)
+    pow.
+\end{lstlisting}
+
+\begin{lstlisting}[frame=single, language=Coq, caption={Extractor Complexity},
+  label={extractor_complex},captionpos=t, basicstyle=\ttfamily\scriptsize,
+  abovecaptionskip=-\medskipamount]
+Inductive complexity_repeat_op_ntimes_rec 
+(e t : N) : positive -> N -> N -> Prop :=
+| xH_case : complexity_repeat_op_ntimes_rec e t xH 
+    (N.modulo e t) N0
+| xO_case p ret w : 
+    complexity_repeat_op_ntimes_rec e t p ret w ->
+    complexity_repeat_op_ntimes_rec e t (xO p) 
+    (N.modulo (ret * ret) t) (N.succ w)
+| xI_case p ret w : 
+    complexity_repeat_op_ntimes_rec e t p ret w ->
+    complexity_repeat_op_ntimes_rec e t (xI p) 
+    (N.modulo (e * (ret * ret)) t) (N.succ w).
+
+Lemma correct_complexity_repeat_op_ntimes_rec : 
+  forall n e w, complexity_repeat_op_ntimes_rec e w n 
+    (repeat_op_ntimes_rec e n w)  (N.log2 (N.pos n)).
+Proof. (* proof terms omitted *) Qed.
+\end{lstlisting}
+
+\begin{lstlisting}[frame=single, language=Coq, caption={Frontend Functions},
+  label={frontend_fun},captionpos=t, basicstyle=\ttfamily\scriptsize,
+  abovecaptionskip=-\medskipamount]
+(* encrypt vote *)
+Definition encrypt_vote (g h : G) (r : F) (m : F) : G * G :=
+  @enc F G gop gpow g h m r.
+
+(* create a proof *)
+Definition generate_enc_proof 
+  (g h : G) (r : F)  (m : F) 
+  (uscs : Vector.t F 3) (cp : G * G) (c : F) : 
+  @Sigma.sigma_proto F (G * G) 2 3 2 :=
+    match Fdec m zero with 
+    | left _ => 
+      @generalised_construct_encryption_proof_elgamal_real F
+        zero add mul sub 
+        opp G ginv gop gpow 0 Fin.F1 r uscs [g^m; g^one] g h
+          cp c 
+        (* real one goes to the first place Fin.F1 *)
+    | right _ =>  
+      @generalised_construct_encryption_proof_elgamal_real F
+        zero add mul sub 
+        opp G ginv gop gpow 0 (Fin.FS Fin.F1) r uscs [g^zero;
+          g^m] g h cp c 
+        (* real one goes to the second place (Fin.FS Fin.F1) *)
+    end.
+
+Definition encrypt_vote_and_generate_enc_proof 
+  (g h : G) (r : F)  (m : F) 
+  (uscs : Vector.t F 3) (c : F) : G * G * @Sigma.sigma_proto F
+    (G * G) 2 3 2 := 
+  let cp := @enc F G gop gpow g h m r in
+  let sig_proof := generate_enc_proof g h r m uscs cp c
+  in (cp, sig_proof).
+
+Theorem vote_proof_invalid_reject :
+  forall (r : F) (g h : G) (m : F)  (u1 u2 c1 : F) (c : F),
+    g <> gid -> (m <> zero /\ m <> one) -> c1 <> c ->
+    verify_encryption_vote_proof g h 
+      (encrypt_vote_and_generate_enc_proof g h r m [u1; u2;
+        c1] c) = false.
+Proof. (* proof terms omitted. *) Qed. 
+
+Theorem vote_proof_invalid_accept :
+  forall (r : F) (g h : G) (m : F)  (u1 u2 c1 : F) (c : F),
+    (m <> zero /\ m <> one) -> c1 = c ->
+    verify_encryption_vote_proof g h 
+      (encrypt_vote_and_generate_enc_proof g h r m [u1; u2;
+        c1] c) = true.
+Proof. (* proof terms omitted. *) Qed.
+
+(* Overall proof: the ballot product encrypts g^m for some 
+   m between 0 and the number of candidates *)
+Definition generate_overall_proof {n : nat} (g h : G) 
+  (rs ms : Vector.t F (S n)) (uscs : Vector.t F ((2 + n) + (1
+    + n))) (c : F) : 
+  @Sigma.sigma_proto F (G * G) (2 + n) (1 + (2 + n)) (2 + n) :=
+  @generalised_construct_encryption_proof_elgamal_real F zero
+    add mul sub opp 
+    G ginv gop gpow n (overall_index ms) (Vector.fold_right
+      add rs zero) 
+    uscs (powers g (S n)) g h (ballot_product (encrypt_ballot
+      g h rs ms)) c.
+
+(* the full ballot: the individual proofs and the overall
+  proof *)
+Definition verify_ballot {k : nat} (g h : G)
+  (b : Vector.t (G * G * @Sigma.sigma_proto F (G * G) 2 3 2) k
+    * 
+       @Sigma.sigma_proto F (G * G) (S k) (S (S k)) (S k)) :
+         bool :=
+  (verify_encryption_ballot_proof g h (fst b) && 
+   verify_overall_proof g h (Vector.map fst (fst b)) (snd
+     b))%bool.
+
+Theorem ballot_with_overall_proof_valid : forall (n : nat) (g
+  h : G) 
+  (rs ms : Vector.t F (S n)) (uscs : Vector.t (Vector.t F 3)
+    (S n)) 
+  (cs : Vector.t F (S n)) (uscs' : Vector.t F ((2 + n) + (1 +
+    n))) (c : F),
+  (forall i : Fin.t (S n), ms[@i] = zero \/ ms[@i] = one) ->
+  verify_ballot g h 
+    (encrypt_ballot_with_overall_proof g h rs ms uscs cs uscs'
+      c) = true.
+Proof. (* proof terms omitted. *) Qed.
+
+(* Special soundness at the ballot level *)
+Theorem vote_proof_sound : forall (g h : G) (cp : G * G)
+  (a : Vector.t (G * G) 2) (c1 c2 : F) (cs1 cs2 rs1 rs2 :
+    Vector.t F 2),
+  verify_encryption_vote_proof g h (cp, (a; c1 :: cs1; rs1)) =
+    true ->
+  verify_encryption_vote_proof g h (cp, (a; c2 :: cs2; rs2)) =
+    true ->
+  c1 <> c2 ->
+  exists (r : F), cp = (g ^ r, gop (g ^ zero) (h ^ r)) \/ 
+    cp = (g ^ r, gop (g ^ one) (h ^ r)).
+Proof. (* proof terms omitted. *) Qed.
+
+Theorem overall_proof_sound : forall (k : nat) (g h : G) 
+  (cps : Vector.t (G * G) (S k))
+  (a : Vector.t (G * G) (S (S k))) (c1 c2 : F) 
+  (cs1 cs2 rs1 rs2 : Vector.t F (S (S k))),
+  verify_overall_proof g h cps (a; c1 :: cs1; rs1) = true ->
+  verify_overall_proof g h cps (a; c2 :: cs2; rs2) = true ->
+  c1 <> c2 ->
+  exists (r : F) (m : nat), m <= S k /\ 
+    ballot_product cps = (g ^ r, gop (g ^ of_nat m) (h ^ r)).
+Proof. (* proof terms omitted. *) Qed.
+\end{lstlisting}
+
+

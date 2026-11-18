@@ -1,0 +1,118 @@
+% Draft for IEEE S&P 2027: the publicly tally-hiding Schulze election
+% (Paper-Handoff.md), rewritten from scratch around the scheme. Files no
+% longer input (sigma, rocq, programs, difftest, casestudies, listings,
+% eqneq, lessons) are kept for reference. Every \TODO marks an open item
+% listed in Paper-Handoff.md section 9.
+\documentclass[conference,compsoc,a4paper]{IEEEtran}
+
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{lstcoq}
+% IEEEtran's column is narrower than the PoPETS (acmart) one: wrap long code lines
+% (lstcoq.sty's Coq language now sets breaklines=true; the language overrides \lstset)
+\lstset{breakatwhitespace=false,
+  postbreak=\mbox{\textcolor{gray}{$\hookrightarrow$}\space}}
+\usepackage{seqsplit}
+\usepackage{tikz}
+\usetikzlibrary{positioning}
+\usepackage{url}
+\usepackage[hidelinks]{hyperref}
+% links from Rocq names to the anonymous artefact (see rocqlinks.tex)
+\input{rocqlinks}
+% Rocq names in \texttt: allow a line break after each underscore, with no
+% hyphen added, so long identifiers wrap instead of overflowing.
+\usepackage{hyphenat}
+\makeatletter
+\renewcommand{\BreakableUnderscore}{\leavevmode%
+  \prw@zbreak\textunderscore\discretionary{}{}{}\prw@zbreak}
+\makeatother
+% let long URLs in the bibliography break after any letter or digit
+\expandafter\def\expandafter\UrlBreaks\expandafter{\UrlBreaks\do\a\do\b\do\c\do\d\do\e\do\f\do\g\do\h\do\i\do\j\do\k\do\l\do\m\do\n\do\o\do\p\do\q\do\r\do\s\do\t\do\u\do\v\do\w\do\x\do\y\do\z\do\A\do\B\do\C\do\D\do\E\do\F\do\G\do\H\do\I\do\J\do\K\do\L\do\M\do\N\do\O\do\P\do\Q\do\R\do\S\do\T\do\U\do\V\do\W\do\X\do\Y\do\Z\do\0\do\1\do\2\do\3\do\4\do\5\do\6\do\7\do\8\do\9\do\-}
+\providecommand{\code}[1]{\texttt{#1}}
+\newcommand{\TODO}[1]{\textcolor{red}{[TODO: #1]}}
+\newcommand{\Vc}{V_{\mathsf{C}}}   % certified verifier
+\newcommand{\Pc}{P_{\mathsf{C}}}   % certified prover
+\newcommand{\Vd}{V_{\mathsf{D}}}   % deployed verifier
+\newcommand{\Pd}{P_{\mathsf{D}}}   % deployed prover
+
+\begin{document}
+
+\title{Schulze in Zero Knowledge:\\ Publicly Tally-Hiding Ranked Elections from Certified $\Sigma$-Protocols}
+
+\author{\IEEEauthorblockN{Anonymous Authors}}
+
+\maketitle
+
+\begin{abstract}
+A ranked-choice election with $m$ candidates admits $m!$ rankings, so a
+published ballot works as a signature of its voter (the \emph{Italian
+attack}), and in a small electorate published pairwise counts
+identify ballots too. Verifiable tallies for the Schulze method publish
+one or the other. The tally-hiding systems that publish neither rely on
+multi-party computation or on SNARKs with a trusted setup.
+
+We present a verifiable Schulze election that publishes neither and is
+built entirely from $\Sigma$-protocols. The public learns the winner 
+but no margin. A ballot is a matrix
+of encrypted pairwise bits anchored to an encrypted ranking, so its
+well-formedness is a conjunction of membership proofs. Pairwise counts are
+aggregated homomorphically and never decrypted on the bulletin board. The
+winner is certified over committed counts by a zero-knowledge closure
+certificate of $O(m^3)$ proofs, independent of the number of voters. 
+Every proof it uses comes from a certified library of
+$\Sigma$-protocols in the Rocq theorem prover. The library has
+machine-checked completeness, special soundness, and zero-knowledge for
+the standard protocols and their $n$-ary compositions, and is extracted
+to OCaml, WebAssembly, and CakeML. We extract the client and verifier from these
+proofs and run them on Gentoo council elections, and they certify Gentoo's winner
+in every one.
+
+In addition, the certified library also serves as a test 
+oracle for deployed systems. Comparing it with the Belenios verifier 
+on the same election data revealed a bug that accepted an invalid ballot. 
+The Belenios maintainers have since fixed it.
+\end{abstract}
+
+\input{sections/intro}
+\input{sections/background}
+\input{sections/library}
+\input{sections/schulze}
+\input{sections/mech}
+\input{sections/eval}
+\input{sections/discussion}
+\input{sections/related}
+\input{sections/conclusion}
+
+\section*{Ethics Considerations and Potential Harms}\label{sec:ethics}
+The Belenios experiments ran on our machines against open-source
+releases of \texttt{belenios-tool} and elections generated with it. They
+involved no production system and no voter data. We reported the dropped
+ballot check to the Belenios maintainers by e-mail on 21 October 2026,
+and they confirmed and fixed it the next day
+(\texttt{115d0d47}).
+
+\section*{Data Availability}
+The Rocq development, the extracted code, the Belenios harness, the
+public Gentoo ballots, and the scripts behind every number are at
+\url{https://anonymous.4open.science/r/SigmaProtocol-EBA5}. We will
+release them under an open-source licence.
+
+\section*{Acknowledgments}
+\TODO{confirm the scope of this disclosure.} We used Claude (Anthropic)
+to edit the text of every section for style and to cross-link the Rocq
+names to the artefact; the authors checked every technical statement
+against the Rocq development.
+
+\bibliographystyle{IEEEtran}
+\bibliography{reference,new}
+
+\appendices
+\input{sections/appendix}
+\input{sections/proofs}
+\input{sections/belenios}
+
+\end{document}

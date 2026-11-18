@@ -1,0 +1,44 @@
+\section{The Library as a Test Oracle: Belenios}\label{sec:belenios}
+The library has a second use that bears on the scheme. Instantiated at a
+deployed system's group, encodings, and hash, its certified verifier is a
+reference implementation of that system's proofs. Its certified prover
+takes every random value and the witness as explicit inputs, so it can
+produce proofs of \emph{false} statements with correctly derived
+Fiat--Shamir challenges. These get past a verifier's hash checks and
+exercise its algebraic checks. We applied this to
+Belenios~\cite{belenios2019}, whose ballots carry the same disjunctive
+encryption proofs as ours. We compared the audit tool its specification
+prescribes, \texttt{belenios-tool election verify} (release 3.2.0), with
+the certified verifier, on elections generated with the tool itself and on
+1{,}715 honest, mutated, structural, and forged boards. The comparison
+found two defects, both outside the proof verification.
+
+First, the audit tool accepted 36 forged boards, each containing a single
+invalid ballot inside an otherwise consistent archive: a well-formed
+ciphertext of an out-of-range value, with random proofs and a signature
+under a listed credential. The ballot was counted and the tool reported
+``all checks passed''. One line of the tool forced the lazy
+ballot-verification computation and discarded the resulting promise, so
+the per-ballot proof and signature checks had no effect on the verdict.
+Under the universal-verifiability threat model this lets a server stuff
+or overwrite ballots while the official audit succeeds. The maintainers
+confirmed the defect, present in releases 3.1 through 3.3.0, and
+committed a fix (commit \texttt{115d0d47}, 22 October 2026, the day
+after our report). The defect is in \texttt{belenios-tool} only and does
+not affect the Belenios web server. Second, the shuffle verifier for
+Belenios's mix-net questions, over Ed25519 (cofactor~8), applies the
+subgroup test to the proof's commitments but not to its ciphertexts. A
+mix server that adds a small-order point to one output and proves the
+shuffle honestly is accepted for a challenge-dependent fraction of seeds
+(26 of 100 for order~2), and the torsion survives the honest
+re-encryptions of later servers \TODO{report this finding}. The
+extracted certified shuffle verifier, with its own decoder's subgroup
+check bypassed on purpose, accepts the same inputs at the same rate: the
+verified algebra does not reject a torsion point, because in Rocq the
+group type \emph{is} the prime-order subgroup and extraction erases that
+proof. The certified pipeline rejects them all at its decoder.
+
+Section~\ref{sec:discussion} applies the same lesson to our scheme: a
+soundness theorem about a group type says nothing about deployed code
+unless the decoder enforces the type, and deployed verifiers fail in the
+checks around a correct proof verification.

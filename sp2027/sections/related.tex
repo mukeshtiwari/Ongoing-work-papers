@@ -1,0 +1,86 @@
+\section{Related Work}\label{sec:related}
+
+Ordinos~\cite{ordinos2020} introduced verifiable tally-hiding elections:
+the aggregated tally is held in threshold Paillier and the result is
+computed by multi-party computation, so that nobody, talliers included,
+learns intermediate values. Hertel et al.~\cite{ordinosext2021} extend it
+to Borda, Hare--Niemeyer, instant-runoff, and Condorcet methods including
+Schulze, with Lipmaa--Toft comparisons. They report $135$ minutes for five
+candidates and $9$ days $10$ hours for twenty, with the trustees on
+i5-class machines over a local network~\cite[pp.\,6, 12]{ordinosext2021}. Cortier, Gaudry, and Yang~\cite{cgy2022}
+give a toolbox over threshold ElGamal with a UC-proven conditional-gate
+primitive and support Condorcet--Schulze with ties. For $1024$ voters and three trustees on two 16-core
+EPYC processors, they report $15$ minutes for five candidates and $8$ hours $50$
+minutes with a $16$\,GB transcript for twenty~\cite[Table 14, p.\,139]{yang2023thesis}.
+They note that their adjacency-matrix Condorcet
+variants reveal the matrix. Kryvos~\cite{kryvos2022} defines
+\emph{publicly} tally-hiding elections, where the talliers learn the tally
+and the public only the result, and realises them with Groth16 proofs over
+Pedersen vector commitments for Borda, majority judgement, instant-runoff,
+and Condorcet (the Smith set, not Schulze). A twenty-candidate Condorcet
+ballot proof takes under $40$ seconds with a $0.5$\,GB proving
+key~\cite[p.\,9]{kryvos2022}, and Condorcet is the result function on
+which their tally scales worst~\cite[p.\,8]{kryvos2022}. Our scheme is publicly tally-hiding like Kryvos, up to the leakage of its
+witness paths, and computes
+Schulze winners like the Ordinos extension and Cortier et al. It uses
+only $\Sigma$-protocols, without MPC, SNARKs, or a trusted setup, and its
+ballot and certificate soundness are machine-checked.
+
+The batched ballot ties the $m^2$ ciphertexts to one committed vector by
+a random linear combination, the batch-verification technique of
+Bellare, Garay, and Rabin~\cite{bgr98}, which Bayer and
+Groth~\cite{10.1007/978-3-642-29011-4_17} put at the core of their shuffle
+argument. Our vector arguments need no trusted setup. Huber et al.~\cite{hklr24} show that general-purpose SNARKs can
+prove the validity of an exponential-ElGamal ballot, and Röhr et
+al.~\cite{rhk25} cut the cost of the exponentiation gadget that
+dominates such circuits. Both keep the per-entry re-encryption inside the
+circuit.
+
+Several verifiable ranked tallies publish the pairwise counts. VERICONDOR~\cite{vericondor2024} encodes a ballot as a pairwise matrix
+with strict preference and indifference, has no tallying authority (in
+the style of DRE-ip), proves well-formedness without a shuffle through a
+permutation proof on row sums ($O(m^2)$ for strict rankings, $O(m^3)$ with
+indifference), and publishes the aggregate matrix. Its authors discuss
+the Italian attack and running Schulze on the published matrix. Haines,
+Pattinson, and Tiwari~\cite{haines2019verifiable} give a homomorphic Schulze
+tally with shuffle-then-decrypt ballot validity and decrypted pairwise counts,
+machine-checked in Coq over axiomatised primitives. Yang et
+al.~\cite{yang2018ranked} tally ranked-choice ballots over exponential
+ElGamal with per-element proofs. Our position-vector validity is simpler than VERICONDOR's
+permutation proof and handles ties with $O(m^2)$ proofs of $O(m)$ branches
+each. Compared with the VSTTE'19 scheme, we remove both leaks (the
+shuffled ballots and the decrypted pairwise counts) and replace the axioms with
+the library's theorems.
+
+For single transferable vote, Shuffle-Sum~\cite{shufflesum2009} and
+Teague, Ramchen, and Naish~\cite{teague2008stv} address the Italian
+attack. Risk-limiting tallies~\cite{jamroga2019rlt} publish a sample of
+ballots instead of all of them.
+
+Belenios has machine-checked privacy and verifiability proofs in
+EasyCrypt~\cite{cortier2018belenios}. Verified verifiers for
+elections~\cite{10.1145/3319535.3354247} and for mix-nets~\cite{9519460,287095}
+check election and mix-net outcomes after the fact, and Pattinson
+and Tiwari~\cite{10.1007/978-3-319-66107-0_26} give the Schulze method
+as evidence-carrying computation, with an extracted counter run on the
+Debian vote archive. The closure certificate of Section~\ref{sec:tally}
+is the Kleene closure of the min-max semiring of that work, here proved
+over encrypted values.
+
+Barthe et al.~\cite{5552642} formalise $\Sigma$-protocols and their
+composition in CertiCrypt without extraction. Butler et
+al.~\cite{butler2021formalising} formalise Schnorr, Chaum--Pedersen, and
+Okamoto and binary And/Or compositions in CryptHOL, with zero-knowledge as
+equality of distributions, as we do, but without executable code, $n$-ary
+compositions, or instantiation. Firsov et al.~\cite{10221929} formalise
+$\Sigma$-protocols in EasyCrypt, and Almeida et
+al.~\cite{almeida2010certifying} give a certifying compiler whose generated
+code is outside the certified boundary. Bernhard et al.\ showed that weak
+Fiat--Shamir breaks deployed verifiers~\cite{10.1007/978-3-642-34961-4_38},
+and Haines et al.\ that the 2019 Swiss Post shuffle proof was
+unsound~\cite{9152765}.
+
+Cryptofuzz~\cite{cryptofuzz} and Project Wycheproof~\cite{wycheproof}
+test unverified implementations of primitives. Neither has an oracle
+that is correct by construction or that proves false statements, which
+Section~\ref{sec:eval:oracle} needs.

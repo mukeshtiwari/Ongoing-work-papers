@@ -1,0 +1,47 @@
+\section{Proof Sketches for the Batched Ballot}\label{app:batched}
+\textbf{Soundness (\rocq{ballot3_sound}).} The proof runs the extractors in sequence. From two challenges of (a) at
+the base $\beta$, \rocq{lin_open3} gives a witness $w$ with $\varphi(w) =
+T$, hence $s$ with $C_\delta = \mathrm{com}(Ms; \rho_\delta)$ by
+\rocq{com_gd}, an opening $b$ of $C_b$, the link $C_\beta =
+\mathrm{Enc}(\langle \beta, b\rangle; R)$, and $C_0 = h_1^{\rho^*}$
+(\rocq{phi3_target_open}). The vectors that vary one coordinate of
+$\beta$ give further witnesses. By binding they open $C_b$ to the same
+$b$, so the link holds for the same $b$ at every $\beta$. Dividing the
+links at $\beta$ and at $\beta'$ differing at $k$ gives $c_k^{\beta_k -
+\beta'_k} = \mathrm{Enc}(b_k (\beta_k - \beta'_k))$ and, taking the
+$(\beta_k - \beta'_k)$-th root in the group, which is a vector space over
+$\mathbb{Z}_q$, $\mathrm{Dec}(c_k) = g^{b_k}$ (\rocq{beta_bits},
+\rocq{root_unique}), so the committed $b$ is the plaintext vector. The
+ciphertext link is undone by roots and not by comparing exponents,
+so the batched ballot needs no hypothesis on the order of $g$, while
+the first ballot needs \rocq{exp_injective}. One accepted zero argument
+gives, by the library's extractor, openings $p$ and $X^{(k)}$ of $C_p$
+and the $C_{X^{(k)}}$ (\rocq{zero_open_ref}), and every other accepted
+$(y, z)$ opens the same vectors unless binding is broken
+(\rocq{zero_open_at}). The weighted sum is then $z$ times a polynomial
+of degree $L + 1$ in $z$ whose coefficients are the row relations, so $L
++ 2$ values of $z$ make each row vanish (\rocq{coeffs_vanish}), and
+$m^2$ values of $y$ make each row vanish coordinate-wise by the
+library's Vandermonde argument (\rocq{prod_of_star},
+\rocq{bits_of_star}). Hence $p = b \circ \delta$, and $b$ and the
+$X^{(k)}$ are bit vectors. By binding on $C_0$, the committed vector
+$\delta + b - 2p + \sum_k 2^k X^{(k)}$ is zero entry by entry
+(\rocq{C0_open}). Finally \rocq{decode_positions} reads off the
+positions. Each $v_k = \sum_t 2^t X^{(t)}_k$ is a natural number below
+$2^L$. If $b_k = 0$ then $\delta_k = -v_k \le 0$, and if $b_k = 1$ then
+$\delta_k = v_k + 1 \ge 1$, so $b_k = [\delta_k \ge 1]$. Since
+$\delta_{ij} = s_j - s_i$, setting $\mathit{pos}_i = 2^L + (s_i - s_0)$,
+a natural number in $[0, 2^{L+1}]$ by the same bounds, gives $b_{ij} =
+[\mathit{pos}_i < \mathit{pos}_j]$. The characteristic bound lets these
+integer inequalities be read in the field.
+
+\textbf{Zero-knowledge (\rocq{ballot3_zk}).} The proof composes three bijections on the randomness: the library's
+\rocq{lin_shvzk} and \rocq{zero_shvzk} for the proofs, given the
+commitments, and $\rho \mapsto \rho + \langle \log_{h_1} \mathbf{g},
+v\rangle$ for the commitments, which makes a commitment to $v$ uniform
+in $\langle h_1 \rangle$. Reading $C_\delta$ as a commitment to $\delta$
+under $\mathbf{g}$ means the derived key needs no logarithms of its own.
+Like the library's Bayer--Groth simulators, the last step names the
+discrete logarithms of the commitment key in base $h_1$. The hypothesis
+holds for every key in the subgroup, and the proof uses the exponents
+only to exhibit the bijection; the simulator does not use them.

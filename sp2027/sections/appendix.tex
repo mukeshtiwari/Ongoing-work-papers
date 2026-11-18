@@ -1,0 +1,155 @@
+\section{Rocq Listings}\label{appendix_listings}
+This appendix collects the Rocq listings referenced from the body. Each caption links to the file in the artefact; the definitions shown are \rocq{generalised_construct_or_conversations_schnorr}, \rocq{generalised_construct_or_conversations_simulator}, \rocq{generalised_or_schnorr_distribution}, \rocq{generalised_or_simulator_distribution}, \rocq{generalised_or_special_honest_verifier_zkp_perm}, \rocq{Schnorr_group}, \rocq{Zp}, \rocq{pow}, and \rocq{pow_vspace}.
+
+\begin{lstlisting}[frame=single, language=Coq, caption={The Schnorr protocol and its zero-knowledge theorem ({\rocq[\texttt{Crypto/Sigma.v}]{schnorr_protocol}})},
+  label={schn_nat},captionpos=t, basicstyle=\ttfamily\scriptsize,
+  abovecaptionskip=-\medskipamount]
+Definition schnorr_protocol (x : F) (g : G) (u c : F) :
+  @sigma_proto 1 1 1 := ([g^u]; [c]; [u + c * x]).
+
+Definition schnorr_simulator (g h : G) (u c : F) :
+  @sigma_proto 1 1 1 := 
+  ([gop (g^u) (h^(opp c))]; [c]; [u]).
+
+Definition accepting_conversation (g h : G)
+  (v : @sigma_proto 1 1 1) : bool :=
+  match v with (a; c; r) =>
+    if Gdec (g^(hd r)) (gop (hd a) (h^(hd c))) then true
+    else false end.
+    
+Theorem special_honest_verifier_zkp_enum (x : F) 
+  (g h : G) (R : h = g^x) :
+  forall (lf : list F) (Hlfn : lf <> List.nil) (c : F),
+  List.NoDup lf -> (forall y : F, List.In y lf) ->
+  Permutation (@schnorr_distribution lf Hlfn x g c)
+    (@simulator_distribution lf Hlfn g h c).
+\end{lstlisting}
+
+\begin{lstlisting}[frame=single, language=Coq, caption={The $n$-ary Or composition and its zero-knowledge theorem ({\rocq[\texttt{Crypto/OrSigmaGen.v}]{generalised_construct_or_conversations_schnorr}})},
+label={or_proof},captionpos=t, basicstyle=\ttfamily\scriptsize,
+abovecaptionskip=-\medskipamount]
+Definition generalised_construct_or_conversations_schnorr {n :
+  nat}
+  (rindex : Fin.t (2 + n)) (x : F) (gs hs : Vector.t G (2 + n))
+  (uscs : Vector.t F ((2 + n) + (1 + n))) (c : F) :
+  @sigma_proto F G (2 + n) (1 + (2 + n)) (2 + n).
+Proof. (* proof terms omitted. *) Defined.
+
+Definition generalised_construct_or_conversations_simulator {n
+  : nat}
+  (gs hs : Vector.t G (2 + n)) (uscs : Vector.t F ((2 + n) +
+    (1 + n)))
+  (c : F) :  @sigma_proto F G (2 + n) (1 + (2 + n)) (2 + n).
+Proof. (* proof terms omitted. *) Defined.
+
+Definition generalised_or_schnorr_distribution
+  {n : nat} (lf : list F) (Hlfn : lf <> List.nil)
+  (rindex : Fin.t (2 + n)) (x : F) (gs hs : Vector.t G (2 +
+    n)) (c : F) :
+  dist (@sigma_proto F G (2 + n) (1 + (2 + n)) (2 + n)) :=
+  uscs <- repeat_dist_ntimes_vector
+    (uniform_with_replacement lf Hlfn) ((2 + n) + (1 + n)) ;;
+  Ret (generalised_construct_or_conversations_schnorr
+    rindex x gs hs uscs c).
+
+Definition generalised_or_simulator_distribution
+  {n : nat} (lf : list F) (Hlfn : lf <> List.nil)
+  (gs hs : Vector.t G (2 + n)) (c : F) :
+  dist (@sigma_proto F G (2 + n) (1 + (2 + n)) (2 + n)) :=
+  usrs <- repeat_dist_ntimes_vector
+    (uniform_with_replacement lf Hlfn) ((2 + n) + (1 + n)) ;;
+  Ret (generalised_construct_or_conversations_simulator gs hs
+    usrs c).
+
+Theorem generalised_or_special_honest_verifier_zkp_perm {n :
+  nat}
+  (x : F) (gs hs : Vector.t G (2 + n)) (rindex : Fin.t (2 +
+    n))
+  (R : hs[@rindex] = gs[@rindex] ^ x) :
+  forall (lf : list F) (Hlfn : lf <> List.nil) (c : F),
+  List.NoDup lf -> (forall y : F, List.In y lf) ->
+  Permutation
+    (generalised_or_schnorr_distribution lf Hlfn rindex x gs
+      hs c)
+    (generalised_or_simulator_distribution lf Hlfn gs hs c).
+Proof. (* proof terms omitted *) Qed.
+\end{lstlisting}
+
+\begin{lstlisting}[frame=single, language=Coq, caption={Rocq encoding of the Schnorr group ({\rocq[\texttt{Utility/Zpstar.v}]{Schnorr}})},
+  label={group_def},captionpos=t, basicstyle=\ttfamily\scriptsize,
+  abovecaptionskip=-\medskipamount]
+Module Schnorr.
+Section SchnorrGroup.
+  Context {k p q : Z} {Hk : p = k * q + 1}
+    {Hp : prime p} {Hq : prime q}.
+
+  Record Schnorr_group := mk_schnorr
+    {v : Z; Ha : 0 < v < p; Hb : (Zpow_mod v q p = 1)}.
+
+  (* u ^ (p - 2) is inverse of u *)
+  Definition inv_schnorr_group (u : Schnorr_group) :
+    Schnorr_group.
+    refine(match u with
+      | mk_schnorr au Hu Hv => mk_schnorr
+          (Z.of_N (Npow_mod (Z.to_N au) (Z.to_N (p - 2))
+            (Z.to_N p)))
+          (@inv_schnorr_group_subproof_first au Hu)
+          (inv_schnorr_group_subproof_second au Hu Hv)
+      end).
+  Defined.
+
+  (* Schnorr is a commutative Group *)
+  Global Instance schnorr_comm : @commutative_group
+    Schnorr_group (@eq Schnorr_group)
+    mul_schnorr_group one inv_schnorr_group.
+End SchnorrGroup.
+End Schnorr.
+\end{lstlisting}
+
+\begin{lstlisting}[frame=single, language=Coq, caption={Rocq encoding of the prime field ({\rocq[\texttt{Utility/Zpstar.v}]{Zpfield}})},
+  label={field_def},captionpos=t, basicstyle=\ttfamily\scriptsize,
+  abovecaptionskip=-\medskipamount]
+Module Zpfield.
+Section ZpField.
+  Context {p : Z} {Hp : prime p}.
+
+  Record Zp := mk_zp {v : Z; Hv : Z.modulo v p = v}.
+
+  Global Instance zp_field : @field Zp (@eq Zp) zero
+    one zp_opp zp_add zp_sub zp_mul zp_inv zp_div.
+End ZpField.
+End Zpfield.
+\end{lstlisting}
+
+\begin{lstlisting}[frame=single, language=Coq, caption={Vector space instantiation ({\rocq[\texttt{Utility/Zpstar.v}]{pow}})},
+  label={vec_space},captionpos=t, basicstyle=\ttfamily\scriptsize,
+  abovecaptionskip=-\medskipamount]
+Definition pow (g : @Schnorr.Schnorr_group p q)
+  (y : @Zpfield.Zp q) : @Schnorr.Schnorr_group p q.
+  refine
+    match g, y with
+    | Schnorr.mk_schnorr gt Hgta Hgtb, Zpfield.mk_zp yt Hyt =>
+        Schnorr.mk_schnorr
+          (Z.of_N (Npow_mod (Z.to_N gt) (Z.to_N yt) (Z.to_N
+            p)))
+          (pow_subproof_first gt yt Hgta Hyt)
+          (pow_subproof_second _ _  Hyt Hgta Hgtb)
+    end.
+Defined.
+
+Global Instance pow_vspace :
+  @vector_space
+    (* Field *)
+    (@Zpfield.Zp q) (@eq (@Zpfield.Zp q))
+    (@Zpfield.zero q Hq) (@Zpfield.one q Hq)
+    (@Zpfield.zp_add q) (@Zpfield.zp_mul q)
+    (@Zpfield.zp_sub q) (@Zpfield.zp_div q)
+    (@Zpfield.zp_opp q Hq) (@Zpfield.zp_inv q)
+    (* Vector *)
+    (@Schnorr.Schnorr_group p q) (@eq (@Schnorr.Schnorr_group
+      p q))
+    (@Schnorr.one p q Hp Hq)
+    (@Schnorr.inv_schnorr_group k p q Hk Hp Hq)
+    (@Schnorr.mul_schnorr_group p q Hp Hq)
+    pow.
+\end{lstlisting}

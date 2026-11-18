@@ -1,0 +1,133 @@
+\section{Certified Differential Testing}\label{sec:difftest}
+Differential testing runs two implementations of one specification on the
+same inputs and reports every input on which they
+disagree~\cite{mckeeman1998differential,yang2011csmith}. Its weakness is the
+oracle problem: a disagreement says that one side is wrong but not which,
+and an agreement says nothing when both sides share a bug or when the inputs
+never reach the code that matters. For proof verifiers both problems are
+acute: two hand-written verifiers can share a missing check, and inputs
+produced by honest provers or by random mutation almost never reach a
+verifier's soundness-critical checks, because a mutated proof fails its
+first hash comparison. A certified library addresses both.
+
+\paragraph{Setting}
+A deployed system implements a proof system with a prover $\Pd$ and a
+verifier $\Vd$, following a published specification. We instantiate the
+certified library at the system's group, encodings and hash, which gives a
+certified verifier $\Vc$ and a certified prover $\Pc$, and compare
+$\Vd(x)$ with $\Vc(x)$ on inputs $x$, and both with the verdict we know by
+construction. $\Vc$ is not an arbitrary second opinion: it consists of a
+certified core and a trusted boundary, and only the boundary is
+unverified. The boundary is the \emph{decoder}, which turns the system's
+serialised data into group elements and exponents and checks subgroup
+membership and ranges; the \emph{challenge closures}, which compute the
+Fiat--Shamir challenges with the system's own hash encoding and pass them
+to the certified verifier as oracles; and the \emph{wiring}, which decides
+which ciphertexts, keys and auxiliary data each proof is about. The core
+is the verification function with its theorems. Hence a disagreement has
+exactly three possible causes: a bug in $\Vd$, a bug in the boundary of
+$\Vc$, or an ambiguity in the specification; Section~\ref{sec:lessons}
+shows that all three occur.
+
+\paragraph{Sources of inputs}
+We combine eight sources (Table~\ref{tab:sources}). Honest proofs from
+$\Pd$ (S1) test the completeness of $\Vc$ and, since we also compare the
+challenges both sides derive, our closures against the deployed hash;
+honest proofs from $\Pc$ (S2) test $\Vd$ on inputs the deployed prover
+never produces, since $\Pc$ takes its randomness as an argument and runs
+on all-zero or all-one randomness, the identity permutation, or identity
+and repeated ciphertexts. Field mutations (S3) replace one occurrence of
+one field by a value of the same type; structural and encoding mutations
+(S4) change shapes and encodings (a vector one element short, a
+non-minimal or negative integer encoding, an exponent $\ge q$, an integer
+outside the group). Mutations of non-hashed fields break a single
+verification equation and test each response check in isolation. For
+S5, since a mutated proof is rejected at its first hash comparison and
+never exercises the algebraic checks, we run $\Pc$ with honest randomness
+on a statement and a witness that do not match (a ``permutation'' that
+maps two outputs to one input, a re-encryption exponent off by one, a
+plaintext changed in one output): every challenge is derived from the
+proof's own transcript, so a verifier under test evaluates every
+algebraic check on a false statement. S7 tampers with complete signed
+election records, re-signed with the development keys the systems
+publish; S8 is coverage-guided fuzzing~\cite{jazzer} of the deployed
+side's decoders, encoders and hash encodings alone.
+
+\begin{table}[t]
+  \caption{Sources of test inputs. ``Accept'' and ``reject'' are the verdict
+  both verifiers must give; ``compare'' means only agreement is required.}
+  \label{tab:sources}
+  \centering\footnotesize
+  \begin{tabularx}{\columnwidth}{@{}l>{\raggedright\arraybackslash}Xl@{}}
+    \toprule
+    Source & Produced by & Verdict \\
+    \midrule
+    S1 honest proofs & $\Pd$ & accept \\
+    S2 honest, degenerate & $\Pc$ (randomness $0$/$1$, identity permutation, trivial ciphertexts) & accept \\
+    S3 field mutations & mutate one field by type & reject\,/\,compare \\
+    S4 structure, encodings & lengths, shapes, ranges, encodings & reject\,/\,compare \\
+    S5 false statements & $\Pc$ on a wrong witness & reject \\
+    S6 single-check forgeries & $\Pc$ with one deviation, + control & reject\,/\,accept \\
+    S7 protocol tampering & edit and re-sign a whole election & reject \\
+    S8 coverage-guided fuzzing & Jazzer~\cite{jazzer} on $\Vd$ alone & no crash, no accept \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\paragraph{Single-check forgeries (S6)}
+The checks of a verifier fall into two classes. \emph{Response checks}
+relate responses to commitments; since responses are not hashed, mutating
+one breaks only the checks that mention it (S3). \emph{Bound checks}
+compare a hashed value with a constant or with the statement, e.g.\
+$c_{d,m+1} = 1$ in the zero argument of Bayer--Groth or $E_m = C$ in its
+multi-exponentiation argument. Mutating the hashed value changes the
+challenge and breaks every equation at once, so no mutation and no random
+input can tell whether a verifier implements a given bound check; yet
+these are the checks whose omission makes a verifier unsound. For each
+bound check $b$ we build, with an independent implementation of the
+specification's prover, a \emph{forgery}: the prover run on a false
+statement with one deviation chosen so that every check except $b$ holds
+(the zero statement sums to $e \ne 0$ and the prover commits honestly to
+the diagonal term $e$; the product chain starts at $a_0 + e$; the
+commitment opens to $b + e$; the ciphertext is multiplied by
+$\mathrm{Enc}(g^e;\sigma)$ and the discrepancy absorbed in $E_m$ or in
+$b_m = e$), and a \emph{control}, the same construction with $e = 0$. A
+verifier that accepts the control and rejects the forgery demonstrably
+implements $b$, and $b$ is demonstrably necessary, since without it the
+verifier would accept a false statement; when the verifier reports which
+check failed, we confirm that it names $b$ and nothing else.
+Table~\ref{tab:bgchecks} lists the seven bound checks of the Swiss Post
+Bayer--Groth verifier.
+
+\begin{table}[t]
+  \caption{The bound checks of the Bayer--Groth verifier of the Swiss Post
+  specification~\cite{swisspost_cryptoprimitives_spec}, and the deviation
+  that isolates each.}
+  \label{tab:bgchecks}
+  \centering\footnotesize\setlength{\tabcolsep}{4pt}
+  \begin{tabular}{@{}lll@{}}
+    \toprule
+    Sub-argument & Bound check & False statement \\
+    \midrule
+    Zero (Alg.~9.23) & $c_{d,m+1}=1$ & $\sum_i a_i\star b_{i-1}=e$ \\
+    Single value product (9.26) & $\tilde b_0=\tilde a_0$ & chain starts at $a_0+e$ \\
+     & $\tilde b_{n-1}=x\,b$ & product is $b+e$ \\
+    Hadamard (9.21) & $c_{B_0}=c_{A_0}$ & chain starts at $a_0+e$ \\
+     & $c_{B_{m-1}}=c_b$ & $c_b$ opens to $b+e$ \\
+    Multi-exponentiation (9.16) & $E_m=C$ & $C\cdot\mathrm{Enc}(g^{e};\sigma)$ \\
+     & $c_{B_m}=1$ & idem, absorbed by $b_m=e$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Engineering}
+The deployed verifiers are called in-process through their own APIs and
+given exactly the inputs $\Vc$ receives; each certified run is a separate
+process on its own input file, so a decoder failure rejects one case and
+not a batch. Every external system is pinned to a commit or release with
+its toolchain, every random choice of our harnesses is seeded, and where a
+deployed prover draws its own randomness its outputs are stored as
+fixtures, so that every verdict table of Section~\ref{sec:casestudies} is
+reproduced from stored cases by one script per system. \TODO{Swiss Post
+harness: seed the extracted prover's generator (currently
+\texttt{/dev/urandom}) and store the Java-generated cases as fixtures.}

@@ -1,0 +1,120 @@
+\section{Background}\label{sec:background}
+
+\subsection{$\Sigma$-protocols}\label{sigma_protocol}
+A $\Sigma$-protocol~\cite{cramer1996modular,cramer1994proofs} is a
+\rocq[three-move proof]{sigma_proto} for an NP relation $R$: on statement $x$ with witness
+$w$, the prover sends an announcement $a$, the verifier a random challenge
+$c$, the prover a response $r$, and the verifier accepts or rejects
+$(a,c,r)$. It is \rocq[\emph{complete}]{schnorr_completeness} if an honest prover is always accepted.
+It is \rocq[\emph{special sound}]{special_soundness_berry} if a witness can be computed from any two
+accepting transcripts $(a,c,r)$ and $(a,c',r')$ with $c \ne c'$. It is
+\rocq[\emph{special honest-verifier zero-knowledge}]{special_honest_verifier_zkp_perm} (SHVZK) if, for every
+challenge $c$, a simulator that does not know the witness produces
+transcripts with the same distribution as the honest prover. The Fiat--Shamir
+transformation makes the protocol non-interactive by setting $c$ to the
+hash of the statement and the announcement. The best-known instance is
+Schnorr's \rocq[proof of knowledge of a discrete logarithm]{schnorr_protocol}~\cite{schnorr1991efficient}.
+Deployed voting systems such as Helios~\cite{adida2008helios},
+Belenios~\cite{belenios2019}, and the Swiss Post
+system~\cite{10.1007/978-3-031-15911-4_4} build their proofs from Schnorr
+proofs and their compositions: conjunctions, disjunctions, and proofs of
+equal discrete logarithms (Chaum--Pedersen). Applied to ElGamal
+ciphertexts, these show that a ciphertext encrypts one of a list of
+messages, or that it decrypts to a given value. Every proof of the scheme
+in Section~\ref{sec:schulze} is of this kind.
+
+\subsection{The Schulze method}\label{sec:bg:schulze}
+A ranked ballot orders the $m$ candidates, with ties allowed. The
+natural winner of a ranked election is a \emph{Condorcet winner}, who
+beats every other candidate head to head. There may be none, because the
+head-to-head contests can form a cycle or end in ties. The Schulze method~\cite{schulze2011} always
+produces a winner, elects the Condorcet winner whenever there is one,
+and depends on the ballots only through their pairwise counts.
+
+The \rocq[\emph{pairwise count matrix}]{margin_count} $D$ (\emph{count matrix} for short) records
+pairwise preferences: $D_{ij}$ is the number of voters who rank $i$
+strictly above $j$, so a voter who ties $i$ and $j$ adds to neither
+$D_{ij}$ nor $D_{ji}$. Candidate $i$ \rocq[\emph{defeats}]{defeat} $j$ with strength
+$d_{ij} = D_{ij}$ if $D_{ij} > D_{ji}$, and $d_{ij} = 0$ otherwise. We
+call $d$ the \emph{defeat matrix}. This is the \emph{winning-votes}
+measure of defeat strength. 
+
+Candidate $i$ may beat $j$ indirectly without defeating it. A path $i = u_0, \ldots, u_\ell = j$ is a
+chain of defeats, and it is only \rocq[as strong as its weakest one]{path_strength},
+$\min_t d_{u_t u_{t+1}}$. The strongest-path value $p_{ij}$ is the
+strength of the best path from $i$ to $j$. Candidate $w$ is a
+\rocq[\emph{Schulze winner}]{schulze_winner} if $p_{wj} \ge p_{jw}$ for every $j$: no candidate
+has a stronger path to $w$ than $w$ has back. At least one Schulze
+winner always exists. A Condorcet winner $w$ is the unique one: it
+defeats every $j$, so $p_{wj} \ge d_{wj} > 0$, and nobody defeats $w$, so
+every path into $w$ ends in an edge of strength $0$ and $p_{jw} = 0$.
+
+\textbf{Running example:} Five voters rank three candidates:
+\[
+  \begin{array}{c}
+    A > B = C, \qquad B > C > A, \qquad B > C > A,\\
+    C > A > B, \qquad A > C > B.
+  \end{array}
+\]
+Their pairwise counts, defeats, and strongest paths are
+\[
+  \setlength{\arraycolsep}{2.5pt}
+  D =\begin{array}{c|ccc}
+        & A & B & C \\ \hline
+      A & - & 3 & 2 \\
+      B & 2 & - & 2 \\
+      C & 3 & 2 & -
+      \end{array}
+  \quad
+  d = \begin{array}{c|ccc}
+        & A & B & C \\ \hline
+      A & - & 3 & 0 \\
+      B & 0 & - & 0 \\
+      C & 3 & 0 & -
+      \end{array}
+  \quad
+  p = \begin{array}{c|ccc}
+        & A & B & C \\ \hline
+      A & - & 3 & 0 \\
+      B & 0 & - & 0 \\
+      C & 3 & 3 & -
+      \end{array}
+\]
+(rows are $i$, columns $j$). There are two defeats, $A$ over $B$ and $C$
+over $A$, each of strength $3$; $B$ and $C$ tie $2$ to $2$. No candidate
+beats both others, so there is no Condorcet winner. $C$ has no direct
+defeat of $B$, but the path $C \to A \to B$ has weakest link $3$, so
+$p_{CB} = 3$. Every other entry of $p$ is a single defeat or $0$. $C$ is
+the unique Schulze winner, since $p_{CA} = 3 \ge p_{AC} = 0$ and $p_{CB}
+= 3 \ge p_{BC} = 0$, while $A$ fails against $C$ ($p_{AC} = 0 < 3$) and
+$B$ fails against both.
+
+The matrix $p$ is the \rocq[closure]{is_closure} of $d$ in the
+semiring with $\max$ as addition and $\min$ as multiplication: a path's
+strength is the $\min$ of its edges, and $p_{ij}$ is the $\max$ over
+paths. It is \rocq[computable]{minmax_closure} in $O(m^3)$ operations by Floyd--Warshall or
+Kleene iteration~\cite{10.1007/978-3-319-66107-0_26}, and is
+characterised by \rocq[three properties]{cert_ok} that our certificate proves over
+encrypted values (Section~\ref{sec:tally}): $p_{ij} \ge d_{ij}$; $p_{ij}
+\ge \min(p_{ik}, p_{kj})$ for every $k$; and $p_{ij}$ is the strength of
+some actual path. Since the winner depends only on $D$, and $D$ is a sum of per-ballot
+bits, it can be computed from the homomorphic sum of the encrypted
+ballots; no individual ballot is ever decrypted.
+
+The Schulze method is used by Debian, the Free Software Foundation
+Europe, and other organisations that vote online with a few hundred to a
+few thousand voters.
+
+\subsection{Tally hiding}\label{sec:bg:hiding}
+Because $m!$ rankings exist, a verifiable ranked tally that publishes
+ballots exposes voters to the \emph{Italian attack}: a coercer prescribes
+a ranking that no honest voter would cast and looks for it on the
+board~\cite{teague2008stv,shufflesum2009}. Publishing only $D$ leaks less,
+but still leaks in a small electorate. 
+Following Kryvos~\cite{kryvos2022}, a
+system is \emph{fully} tally-hiding if no party, talliers included,
+learns anything beyond the result, and \emph{publicly} tally-hiding if
+the talliers learn the aggregated tally (here $D$) and the public learns
+only the result. The scheme of this paper is publicly tally-hiding except for one leak:
+the witness paths of its certificate, which reveal who wins some
+head-to-head contests but not by how much (Section~\ref{sec:security}).
