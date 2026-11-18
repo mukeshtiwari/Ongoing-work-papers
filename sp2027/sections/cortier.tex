@@ -1,0 +1,42 @@
+\section{Comparison to Cortier et al.}\label{app:cortier}
+Table~\ref{tab:cortier} sets our trustees against the tally-hiding
+Condorcet--Schulze protocol of Cortier et al.~\cite{cgy2022}, using the
+only benchmarks published for it~\cite[Table 14]{yang2023thesis}. They
+report the trustees' wall-clock time and the transcript size, for three
+trustees of four computing threads each, and no verification time. Our
+numbers are those of Table~\ref{tab:par}: the trustees' wall-clock time
+with twelve worker processes, and the certificate size. At their sixth
+size, twenty candidates and $1024$ voters ($8$ hours $50$ minutes,
+$16$\,GB), we did not run our prover.
+
+The comparison is indicative only. The two protocols do not hide the
+same thing: their talliers learn only the winner, while ours learn $D$
+and the public learns the witness paths. The machines differ (two EPYC
+7282 processors there, an Apple M5 Max here), their implementation works
+over an elliptic curve and ours over a 2048-bit group, and their
+transcript covers the whole tally while our certificate covers only the
+proof of the winner. Having said this, at the five sizes both papers
+report, our trustees take between a tenth and three tenths of their
+time, and our certificate is between a third and a half of their
+transcript.
+
+\begin{table}[h]
+  \caption{Trustees' wall-clock time and size: our certificate with
+  twelve worker processes (Table~\ref{tab:par}), against the transcript
+  of Cortier et al.~\cite[Table 14]{yang2023thesis}. Machines, groups,
+  and privacy guarantees differ.}
+  \label{tab:cortier}
+  \centering\scriptsize\setlength{\tabcolsep}{3pt}
+  \begin{tabular}{@{}rrrrrr@{}}
+    \toprule
+    & & \multicolumn{2}{c}{this paper} & \multicolumn{2}{c}{Cortier et al.} \\
+    $m$ & $N$ & time & certificate & time & transcript \\
+    \midrule
+    5 & 64 & 11\,s & 14\,MB & 1\,min 50\,s & 49\,MB \\
+    10 & 64 & 68\,s & 93\,MB & 8\,min 30\,s & 0.30\,GB \\
+    20 & 64 & 8.0\,min & 0.65\,GB & 45\,min & 1.8\,GB \\
+    5 & 1024 & 2.8\,min & 0.21\,GB & 15\,min & 0.60\,GB \\
+    10 & 1024 & 18.9\,min & 1.42\,GB & 65\,min & 3.1\,GB \\
+    \bottomrule
+  \end{tabular}
+\end{table}
