@@ -35,17 +35,15 @@ privacy at two levels. We claim:
 \end{itemize}
 Appendix~\ref{app:security} states the assumptions and these claims
 precisely. Eligibility, corrupt voting devices, and receipt-freeness are
-out of scope: we assume a public, append-only board that accepts one
-ballot per credential, and a voter who reveals a ballot's randomness can
-prove how they voted. The scheme closes the coercion channel through the
-published tally, not the one through receipts.
+out of scope: we assume a public, append-only board with one ballot per
+credential, and a voter who reveals a ballot's randomness can prove how
+they voted. The scheme closes the coercion channel through the published
+tally, not the one through receipts.
 
 \subsection{A run, end to end}\label{sec:run}
 An election has five steps, each posted on the bulletin board.
 \begin{enumerate}
   \item \emph{Setup}: The trustees publish the election key $h = g^x$.
-  The commitment key of the batched ballot is public and needs no
-  trusted party (Section~\ref{sec:batched}).
   \item \emph{Voting}: Each voter's device encrypts the voter's ranking,
   candidate by candidate and pair by pair, and attaches non-interactive
   proofs that the ciphertexts are those of \emph{one} ranking
@@ -640,24 +638,22 @@ candidate $j$, a range proof $p_{wj} - p_{jw} \in \{0, \ldots, N\}$, that
 is, $p_{wj} \ge p_{jw}$. This is the definition of a Schulze winner
 (Section~\ref{sec:bg:schulze}). In the running example $p_{CA} - p_{AC} =
 3$ and $p_{CB} - p_{BC} = 3$. A certificate for $A$ would need $p_{AC} -
-p_{CA} = -3 \in \{0, \ldots, 5\}$, so the verifier rejects it. With ties
-there can be several Schulze winners. The honest trustees announce the
-first in candidate order (\rocq{winner_of}), but the verifier accepts
-any of them (Section~\ref{sec:discussion}).
+p_{CA} = -3 \in \{0, \ldots, 5\}$, so the verifier rejects it. With
+ties, the honest trustees announce the first Schulze winner in candidate
+order (\rocq{winner_of}), but the verifier accepts any
+(Section~\ref{sec:discussion}).
 
 \textbf{Checking the certificate.} The verifier recomputes the aggregate
 $\mathrm{Enc}(D)$ from the board and checks the proofs of (i)--(iv)
 against it (\rocq{verify_tally}, one check per part in
 \rocq{tally_checks}). It needs no secret. The certificate has $O(m^3)$
-proofs, mostly the $m^3$ closure disjunctions, and their number does not
-depend on $N$. Their size does: each range proof has $N + 1$ branches and
-each closure disjunction $2N + 2$, so the certificate has $O(m^3 N)$
-group elements. Section~\ref{sec:eval} measures both.
+proofs, mostly the $m^3$ closure disjunctions. Each range proof has $N +
+1$ branches and each closure disjunction $2N + 2$, so the certificate
+has $O(m^3 N)$ group elements (Section~\ref{sec:eval}).
 
-\textbf{Several seats.} Gentoo's council fills several seats from one
-election. The trustees can certify one winner per seat on the same
-encrypted counts (Appendix~\ref{app:extensions}). We have implemented
-and measured the first seat only.
+\textbf{Several seats.} The trustees can certify one winner per seat on
+the same encrypted counts (Appendix~\ref{app:extensions}). We have
+implemented and measured the first seat only.
 
 \begin{table*}[t]
   \caption{The certificate of the running example ($N = 5$, winner $C$) 
@@ -728,13 +724,12 @@ winner is a Schulze winner of the rankings the voters cast.
 \rocq{schulze_end_to_end3} does the same with batched ballots.
 
 The step from the rewinding form to Fiat--Shamir is on paper. For the
-first ballot and the certificate it needs no rewinding, because their
-statements are about ciphertexts only. Read contrapositively, the
-theorems say that a false statement has at most one accepting challenge
-for each choice of ciphertexts and announcements, and the challenge is
-the hash of exactly these. So an adversary that controls every voter and
-trustee and makes $Q$ oracle queries gets a wrong winner accepted with
-probability at most $(Q + N + 1)/q$ (Proposition~\ref{prop:verif},
+first ballot and the certificate it needs no rewinding: by the theorems,
+a false statement has at most one accepting challenge for each choice of
+ciphertexts and announcements, and the challenge is the hash of exactly
+these. So an adversary that controls every voter and trustee and makes
+$Q$ oracle queries gets a wrong winner accepted with probability at most
+$(Q + N + 1)/q$ (Proposition~\ref{prop:verif},
 Appendix~\ref{app:security}). For the batched ballot, an argument of
 knowledge, we only outline the step (Section~\ref{sec:batched}).
 
@@ -774,8 +769,7 @@ defeats is stronger than the direct contest of $i$ and $j$, and, since
 the search returns a shortest path, that no shorter chain is as strong:
 directions and order relations, but no count. In the running example
 only $C \to A \to B$ has two edges, so the public learns that $C$ defeats
-$A$ and $A$ defeats $B$, but not the counts $3$ to $2$ behind either
-defeat. In the Gentoo elections of Section~\ref{sec:eval:gentoo} the
+$A$ and $A$ defeats $B$, but no count. In the Gentoo elections of Section~\ref{sec:eval:gentoo} the
 paths reveal the winner of $118$ of the $1{,}050$ head-to-head contests:
 none in two elections, at most $15$ of $66$
 (\rocqfile{bench/gentoo_paths.py}).
@@ -802,29 +796,26 @@ coercer check the voters of a small electorate
 
 The MPC-based systems, the Ordinos extension and Cortier et al., hide
 more than we do: even the talliers learn only the winner. Cortier et
-al.\ report the trustees' wall-clock time and the transcript size, with
+al.\ report the trustees' wall-clock time and the transcript size, for
 three trustees of four computing threads each, and no verification
-time~\cite[Table 14]{yang2023thesis}: $8.5$ minutes and $0.3$\,GB for
-ten candidates and $64$ voters, and $8$ hours $50$ minutes and $16$\,GB
-for twenty candidates and $1024$ voters. On one thread our trustees take
-$18$ minutes for ten candidates and $50$ voters (Table~\ref{tab:gentoo}).
-Our certificate grows linearly with $N$: for twenty candidates and
-$1024$ voters it would have about $18$ million branches, about
-$10$\,GB, and, at the rates of Section~\ref{sec:eval:tally}, take the
-trustees about $41$ hours. Over the sizes they report, our trustees on
-one thread are two to five times slower than theirs on twelve, and our
-certificate is between a third and two thirds of their transcript. The
-implementations differ in more than threads: theirs works over an
-elliptic curve and ours over a 2048-bit group, and our proofs can be
-computed and checked in parallel, which we have not implemented.
+time~\cite[Table 14]{yang2023thesis}. Table~\ref{tab:par} sets our
+trustees, with twelve worker processes, against five of their six
+sizes. Ours take between a tenth and three tenths of their time, and our
+certificate is between a third and a half of their transcript. At their
+sixth size, twenty candidates and $1024$ voters ($8$ hours $50$ minutes,
+$16$\,GB), which we did not run, our certificate would be about
+$10$\,GB and take about $2$ hours at the measured rate. The comparison
+is indicative only. The machines differ (two EPYC 7282 processors there,
+an Apple M5 Max here), their implementation works over an elliptic curve
+and ours over a 2048-bit group, and their tally hides the counts from
+the talliers. Our verifier still runs on one core.
 
 Kryvos is the closest to our scheme. It is publicly tally-hiding, and
 without our path leakage. But it needs a SNARK with a trusted setup, and
-it computes Condorcet winners (the Smith set) rather than Schulze
-winners. Our scheme uses only $\Sigma$-protocols, needs no trusted setup,
-handles ties, and has machine-checked ballot and certificate soundness
-and zero-knowledge. The price is the leakage of the witness paths and a
-certificate whose size grows with $N$ (Section~\ref{sec:eval:tally}).
+it computes the Smith set rather than Schulze winners. Our scheme uses
+only $\Sigma$-protocols and has machine-checked soundness and
+zero-knowledge. The price is the leakage of the witness paths and a
+certificate whose size grows with $N$.
 
 \begin{table}[t]
   \caption{Verifiable ranked tallies. ``Public'' and ``talliers'' are what

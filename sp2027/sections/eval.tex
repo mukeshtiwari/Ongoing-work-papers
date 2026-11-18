@@ -1,7 +1,7 @@
 \section{Evaluation}\label{sec:eval}
 Scripts in the artefact produce every number in this section. Every
-program is single-threaded, and we ran them on an Apple M5 Max laptop
-with 48\,GB of RAM. Sizes count $256$ bytes per group element and $32$
+program but the parallel prover of Section~\ref{sec:eval:tally} uses
+one core, and we ran them on an Apple M5 Max laptop with 48\,GB of RAM. Sizes count $256$ bytes per group element and $32$
 per field element; KB and MB are binary ($2^{10}$ and $2^{20}$ bytes). The extracted OCaml code is compiled with OCaml 5.4.1. It
 uses \texttt{zarith} (GMP) for big-number arithmetic and SHAKE-256 from
 HACL$^*$ as the Fiat--Shamir hash.
@@ -37,32 +37,49 @@ and verification times of the extracted OCaml code.
 \end{table}
 
 \subsection{Tally cost}\label{sec:eval:tally}
-Table~\ref{tab:tallycost} gives the certificate's size and time on
-synthetic elections. The certificate grows linearly in $N$, through the
+Table~\ref{tab:tallycost} (Appendix~\ref{app:onecore}) gives the
+certificate's size and time on synthetic elections with the extracted
+prover. The certificate grows linearly in $N$, through the
 branch counts of its membership proofs, and cubically in $m$, through the
-$m^3$ closure disjunctions (Section~\ref{sec:tally}). A certificate
-with $E$ witness-path edges has $m^3(2N+2) + m^2(4N+3) + (E+m)(N+1)$
-branches, of two group and two field elements each. A branch costs the
-trustees about $8$\,ms, including decrypting the counts by a search up
-to $N$ ($18$\,ms in the last row), and the verifier about $4$\,ms.
+$m^3$ closure disjunctions (Section~\ref{sec:tally}). A disjunction
+branch costs the trustees about $8$\,ms, including decrypting the counts
+by a search up to $N$ ($18$\,ms in the last row), and the verifier
+about $4$\,ms.
+
+The extracted prover uses one core and computes every proof twice: with
+challenge zero, to get the announcements that are hashed, and with the
+hashed challenge. A second prover,
+\rocqfile[par.exe]{src/Executable/SchulzeBenchcode/par.ml}, calls the
+same extracted functions for every proof, but from twelve worker
+processes and only once: the announcements do not depend on the
+challenge, so it patches the challenge into each proof afterwards. Its
+loop over the proofs is not verified. On small elections
+its certificate equals the extracted prover's on the same randomness.
+Table~\ref{tab:par} gives its times, about $5$\,ms of processor time
+per branch. The extracted verifier accepted the three smallest of these
+certificates; we did not run it on the other two.
 
 \begin{table}[t]
-  \caption{Certificate size and time at the 2048-bit Helios parameters,
-  synthetic elections. Script: \rocqfile[Executable/SchulzeBenchcode/main.exe]{src/Executable/SchulzeBenchcode/main.ml}
-  $m$ $N$. Table~\ref{tab:gentoo} has the real elections.}
-  \label{tab:tallycost}
+  \caption{Trustees' wall-clock time and certificate size with twelve
+  worker processes (\rocqfile[bench/schulze\_par.sh]{bench/schulze_par.sh}),
+  against Cortier et al.~\cite[Table 14]{yang2023thesis}. Machines and
+  groups differ (Section~\ref{sec:comparison}).}
+  \label{tab:par}
   \centering\scriptsize\setlength{\tabcolsep}{3pt}
   \begin{tabular}{@{}rrrrrr@{}}
     \toprule
-    $m$ & $N$ & group el. & size & trustees & verifier \\
+    & & \multicolumn{2}{c}{this paper} & \multicolumn{2}{c}{Cortier et al.} \\
+    $m$ & $N$ & time & certificate & time & transcript \\
     \midrule
-    3 & 5 & 1{,}278 & 360\,KB & 5.2\,s & 2.6\,s \\
-    3 & 20 & 4{,}338 & 1.2\,MB & 17\,s & 8.7\,s \\
-    5 & 50 & 40{,}848 & 11.2\,MB & 163\,s & 83\,s \\
-    7 & 100 & 190{,}376 & 52.3\,MB & 1{,}668\,s & 382\,s \\
+    5 & 64 & 11\,s & 14\,MB & 1\,min 50\,s & 49\,MB \\
+    10 & 64 & 68\,s & 93\,MB & 8\,min 30\,s & 0.30\,GB \\
+    20 & 64 & 8.0\,min & 0.65\,GB & 45\,min & 1.8\,GB \\
+    5 & 1024 & 2.8\,min & 0.21\,GB & 15\,min & 0.60\,GB \\
+    10 & 1024 & 18.9\,min & 1.42\,GB & 65\,min & 3.1\,GB \\
     \bottomrule
   \end{tabular}
 \end{table}
+
 
 \subsection{The Gentoo council elections, end to end}\label{sec:eval:gentoo}
 We ran the thirteen Gentoo council elections through the extracted code,

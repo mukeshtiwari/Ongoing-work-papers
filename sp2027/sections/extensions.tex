@@ -63,3 +63,28 @@ of it. Seven seats need seven certificates on the same encrypted counts,
 with $m, m-1, \ldots, m-6$ candidates, and each adds its own witness
 paths to the leakage. We have implemented and measured the first seat
 only.
+
+\section{Certificate Cost with the Extracted Prover}\label{app:onecore}
+Table~\ref{tab:tallycost} gives the size of the certificate and the
+time of the extracted prover and verifier, each on one core
+(Section~\ref{sec:eval:tally}). A certificate with $E$ witness-path
+edges has $m^3(2N+2) + m^2(4N+3) + (E+m)(N+1)$ disjunction branches, of
+two group and two field elements each.
+
+\begin{table}[h]
+  \caption{Certificate size and time at the 2048-bit Helios parameters,
+  synthetic elections. Script: \rocqfile[Executable/SchulzeBenchcode/main.exe]{src/Executable/SchulzeBenchcode/main.ml}
+  $m$ $N$. Table~\ref{tab:gentoo} has the real elections.}
+  \label{tab:tallycost}
+  \centering\scriptsize\setlength{\tabcolsep}{3pt}
+  \begin{tabular}{@{}rrrrrr@{}}
+    \toprule
+    $m$ & $N$ & group el. & size & trustees & verifier \\
+    \midrule
+    3 & 5 & 1{,}278 & 360\,KB & 5.2\,s & 2.6\,s \\
+    3 & 20 & 4{,}338 & 1.2\,MB & 17\,s & 8.7\,s \\
+    5 & 50 & 40{,}848 & 11.2\,MB & 163\,s & 83\,s \\
+    7 & 100 & 190{,}376 & 52.3\,MB & 1{,}668\,s & 382\,s \\
+    \bottomrule
+  \end{tabular}
+\end{table}

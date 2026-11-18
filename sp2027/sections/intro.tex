@@ -63,17 +63,16 @@ containing an invalid ballot (Section~\ref{sec:eval:oracle}).
   counts are added up under encryption, and the winner is proved correct
   by a zero-knowledge certificate of $O(m^3)$ proofs and $O(m^3 N)$
   group elements. The scheme needs no shuffle and no
-  trusted setup, where Kryvos needs Groth16. On one core it certifies a
-  $10$-candidate, $50$-voter election in $18$ minutes (verification $9$
-  minutes) and a $17$-candidate, $96$-voter one in $2.4$ hours
-  (verification $71$ minutes). The MPC-based tally-hiding Schulze of
-  Cortier et al., which hides the counts from the talliers too, takes $8.5$
-  minutes for ten candidates and $64$ voters, and $8$ hours $50$ minutes
-  for twenty candidates and $1024$ voters, on twelve
-  threads~\cite{cgy2022,yang2023thesis}. On one thread our trustees take
-  two to five times longer at the sizes that work reports, and our
-  certificate is smaller than its transcript
-  (Section~\ref{sec:comparison}).
+  trusted setup, where Kryvos needs Groth16. On one core the extracted
+  prover certifies a $17$-candidate, $96$-voter election in $2.4$ hours
+  (verification $71$ minutes). A prover that runs the same
+  extracted proof functions in twelve processes certifies ten candidates
+  and $64$ voters in $68$ seconds, and ten candidates and $1024$ voters
+  in $19$ minutes. The MPC-based tally-hiding Schulze of Cortier et al.,
+  which hides the counts from the talliers too, reports $8.5$ and $65$
+  minutes at these sizes, on twelve threads of other
+  hardware~\cite{cgy2022,yang2023thesis}, and transcripts more than
+  twice the size of our certificates (Section~\ref{sec:comparison}).
   \item \textbf{Machine-checked ballot and certificate soundness}
   (Section~\ref{sec:mech}). We prove in Rocq that an accepted ballot
   encrypts a single ranking (\rocq{ballot_sound}), and that an accepted
