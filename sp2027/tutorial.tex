@@ -1,0 +1,2914 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=2.6cm]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
+\usepackage{microtype}
+\usepackage{tabularx}
+\setlength{\emergencystretch}{3em}
+
+\newcommand{\G}{\mathbb{G}}
+\newcommand{\Z}{\mathbb{Z}}
+\newcommand{\Enc}{\mathsf{Enc}}
+\newcommand{\Dec}{\mathsf{Dec}}
+\newcommand{\com}{\mathsf{com}}
+\newcommand{\pos}{\mathit{pos}}
+\newcommand{\rocq}[1]{\texttt{#1}}
+\newcommand{\ex}[1]{\par\medskip\noindent\textbf{Example.}~#1\par\medskip}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{proposition}[theorem]{Proposition}
+\theoremstyle{remark}
+\newtheorem*{remark}{Remark}
+
+\title{Two Certified Schulze Ballots, Explained\\[4pt]
+\large A tutorial on the receipt-free Schulze election of the paper, with worked examples and proofs}
+\author{Companion note to the paper\\ \emph{A Publicly Tally-Hiding Schulze Election}\\ \emph{with Machine-Checked Soundness}}
+\date{October 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This note explains, from first principles and with numbers small enough to
+check by hand, the two ballot encodings and the tally certificate of the
+paper's Schulze election: how a voter encrypts a ranking and proves that the
+ciphertexts are those of one ranking, how the pairwise margins are
+aggregated without a key, how the trustees certify the Schulze winner over
+encrypted margins without publishing them, and why the whole thing is sound,
+zero-knowledge and receipt-free. It covers the cryptography the scheme rests
+on (exponential ElGamal, Pedersen vector commitments, $\Sigma$-protocols and
+their OR-composition, the Fiat--Shamir transform, a $\Sigma$-protocol for the
+preimage of a linear map, and the Bayer--Groth zero argument), then walks
+through the first ballot (membership proofs, $O(m^3)$ cost), the batched
+ballot (four vector arguments, $O(m^2 \log m)$ cost), and the closure
+certificate, each on a three-candidate election with five voters in a toy
+group of order $23$, with every proof written out. It ends with the list of
+machine-checked theorems and what each one says. It is written for readers
+who know what a public-key cryptosystem is and have not worked with
+zero-knowledge proofs.
+\end{abstract}
+
+\tableofcontents
+
+\section{How to read this note}\label{sec:howto}
+The paper states the scheme compactly and relies on the Rocq development for
+the proofs. This note is the long version: it takes one election, three
+candidates $A, B, C$ and five voters, and follows it through every step of
+both protocols, with the group small enough that each equation can be
+recomputed with a pocket calculator. The proofs are given in full where the
+paper gives a sketch. Rocq names are in \rocq{typewriter}; every theorem
+quoted here is proved in the development and listed in its
+\rocq{THEOREMS.md}, and Section~\ref{sec:mech} maps the statements of this
+note to those names.
+
+The order is: the problem (Section~\ref{sec:problem}); the cryptographic
+tools (Section~\ref{sec:tools}); the three ballots step by step, with
+the toy numbers but without proofs (Section~\ref{sec:steps}); the first ballot
+(Section~\ref{sec:ballot1}); aggregation (Section~\ref{sec:agg}); the
+batched ballot, with a proposed simplification at its end
+(Section~\ref{sec:ballot2}); one ballot through both protocols with every
+number (Section~\ref{sec:walk}); the tally certificate
+(Section~\ref{sec:tally}); security (Section~\ref{sec:security}); a
+general recipe for designing such proofs (Section~\ref{sec:recipe});
+where the ideas come from (Section~\ref{sec:sources}); the mechanisation
+(Section~\ref{sec:mech}); and running the artefact
+(Section~\ref{sec:artefact}). A reader who wants only the second protocol
+can read Sections~\ref{sec:problem}, \ref{sec:tools} and~\ref{sec:ballot2};
+a reader who wants the protocols without the proofs can read
+Sections~\ref{sec:tools} and~\ref{sec:steps}.
+
+\paragraph{The toy group} Throughout, the examples use the Schnorr group of
+order $q = 23$ inside $\Z_{47}^*$: $p = 47 = 2 \cdot 23 + 1$, and $g = 2$
+has order $23$ modulo $47$ (it is a quadratic residue, since $47 \equiv -1
+\pmod 8$, and $2 \ne 1$). All exponents live in $\Z_{23}$ and all group
+elements are integers modulo $47$. The election key is $x = 5$, $h = g^5 =
+32$. Real elections use a $2048$-bit $p$ with a $256$-bit $q$ (the Helios
+parameters) and nothing else changes.
+
+\paragraph{The running example} Three candidates $A, B, C$, five voters:
+\begin{gather*}
+  \text{ballot 1: } A > B = C,\qquad
+  \text{ballots 2, 3: } B > C > A,\\
+  \text{ballot 4: } C > A > B,\qquad
+  \text{ballot 5: } A > C > B.
+\end{gather*}
+We will encode ballot 1 in both protocols, aggregate all five, and certify
+the winner, which turns out to be $C$.
+
+\section{The problem}\label{sec:problem}
+
+\subsection{Ranked ballots and the Schulze method}
+A ranked ballot over $m$ candidates orders them, with ties allowed; Gentoo
+and Debian also allow leaving candidates unranked, which counts as ranking
+them last. Its pairwise content is, for each ordered pair $(i, j)$, whether
+the voter ranks $i$ strictly above $j$. Summed over all ballots this gives
+the \emph{margin matrix} $D$: $D_{ij}$ is the number of voters who rank $i$
+above $j$. Everything the Schulze method does depends on the ballots only
+through $D$.
+
+From $D$, candidate $i$ \emph{defeats} $j$ with strength $d_{ij} = D_{ij}$
+if $D_{ij} > D_{ji}$, and $d_{ij} = 0$ otherwise. A \emph{path} from $i$ to
+$j$ is a sequence $i = u_0, u_1, \ldots, u_\ell = j$ with $\ell \ge 1$; its
+strength is its weakest defeat, $\min_t d_{u_t u_{t+1}}$. The
+\emph{strongest-path} matrix $p$ has $p_{ij}$ equal to the maximum strength
+of a path from $i$ to $j$ (and $0$ if no path has positive strength).
+Candidate $w$ is a \emph{Schulze winner} if $p_{wj} \ge p_{jw}$ for every
+$j$. At least one winner always exists; with ties among winners, Gentoo and
+Debian break them by a published rule, which we do not touch.
+
+\ex{The five ballots give the margins (rows are $i$, columns $j$):
+\[
+  D = \begin{pmatrix} - & 3 & 2 \\ 2 & - & 2 \\ 3 & 2 & - \end{pmatrix},
+\]
+for instance $D_{AB} = 3$ because ballots $1, 4, 5$ rank $A$ above $B$, and
+$D_{BC} = D_{CB} = 2$: ballots $2, 3$ have $B > C$, ballots $4, 5$ have $C >
+B$, ballot $1$ ties them. The defeats are $d_{AB} = 3$ (since $3 > 2$) and
+$d_{CA} = 3$ (since $3 > 2$); every other pair has $D_{ij} \le D_{ji}$, so
+$d_{ij} = 0$. The strongest paths: $p_{AB} = 3$ (the edge), $p_{CA} = 3$
+(the edge), $p_{CB} = \min(d_{CA}, d_{AB}) = 3$ via $C \to A \to B$, and
+$p_{AC} = p_{BA} = p_{BC} = 0$, since every path from $A$ to $C$, from $B$
+to $A$ or from $B$ to $C$ uses an edge of strength $0$. The winner is $C$:
+$p_{CA} = 3 \ge p_{AC} = 0$ and $p_{CB} = 3 \ge p_{BC} = 0$. Candidate $A$
+is not a winner, since $p_{AC} = 0 < p_{CA} = 3$.}
+
+\subsection{What a published tally leaks}
+A verifiable election must let anyone check the result. The simplest way is
+to publish the ballots, as Gentoo does; but with $m! \cdot$(ties) possible
+rankings, almost every ballot is unique, and a coercer who prescribes a
+ranking can find it on the board (the ``Italian attack''). Publishing only
+$D$ is better but, in an electorate of a hundred, a margin of one or two
+confirms a prescribed preference between two candidates. The paper measures
+this on Gentoo's thirteen council elections: in every one, all but at most
+two ballots are unique rankings, and up to ten candidate pairs have a margin
+of at most two.
+
+\subsection{What we want}
+We want a scheme in which: anyone can verify the result from the public
+board with no key (\emph{universal verifiability}); the public learns the
+winner and nothing else about the ballots (\emph{public tally-hiding}, in
+the terminology of Kryvos); the trustees, who hold the decryption key,
+learn the margin matrix $D$ but no ballot; and nothing on the board lets a
+voter prove to a coercer how they voted (\emph{receipt-freeness} against a
+coercer who sees the whole board). We also want the costly parts to be
+cheap enough to run on real elections, and the soundness of the two checks
+that decide the result, the ballot check and the certificate check, to be
+proved in a proof assistant.
+
+\section{Cryptographic tools}\label{sec:tools}
+
+\subsection{Exponential ElGamal}
+Fix the group $\G = \langle g \rangle$ of prime order $q$ and the key $h =
+g^x$. The \emph{exponential ElGamal} encryption of a small integer $v$ with
+randomness $r \in \Z_q$~\cite{elgamal} is
+\[
+  \Enc(v; r) = (g^r,\; g^v h^r).
+\]
+Decryption with $x$ computes $c_2 \cdot c_1^{-x} = g^v h^r g^{-rx} = g^v$,
+and recovers $v$ from $g^v$ by trying $v = 0, 1, 2, \ldots$ up to a known
+bound; in this scheme every plaintext is a bit or a count of voters, so the
+bound is the number of voters $N$. We write $\Dec(c) = g^v$ for the group
+element, which is what the proofs talk about.
+
+The encryption is \emph{homomorphic}: multiplying ciphertexts componentwise
+adds plaintexts and randomness,
+\[
+  \Enc(v; r) \cdot \Enc(v'; r') = \Enc(v + v'; r + r'),
+  \qquad
+  \Enc(v; r)^a = \Enc(a v; a r),
+\]
+and dividing subtracts. The security property we need is IND-CPA under the
+decisional Diffie--Hellman assumption: without $x$, ciphertexts of different
+plaintexts are indistinguishable.
+
+\ex{With $g = 2$, $h = 32$ in $\Z_{47}$: $\Enc(1; 3) = (2^3, 2^1 \cdot
+32^3) = (8, 18)$ and $\Enc(0; 7) = (2^7, 32^7) = (34, 7)$. Decrypting the
+first: $18 \cdot 8^{-5} = 2 = g^1$. Their product is $(8 \cdot 34, 18
+\cdot 7) = (37, 32) = \Enc(1; 10)$, and their quotient is $(8 \cdot
+34^{-1}, 18 \cdot 7^{-1}) = (3, 16) = \Enc(1; 3 - 7) = \Enc(1; 19)$.}
+
+\subsection{Pedersen vector commitments}
+Fix a second generator $h_1$ and generators $g_1, \ldots, g_n$ of $\G$,
+chosen so that nobody knows discrete logarithms among them (in practice:
+hashed to the group from public labels). The \emph{Pedersen vector
+commitment}~\cite{pedersen} to $v \in \Z_q^n$ with randomness $\rho$ is
+\[
+  \com(v; \rho) = h_1^{\rho} \prod_{j=1}^{n} g_j^{v_j}.
+\]
+It is \emph{perfectly hiding}: for uniform $\rho$ the commitment is uniform
+in $\G$ whatever $v$ is. It is \emph{binding} under the discrete-logarithm
+assumption: two openings $(v, \rho) \ne (v', \rho')$ of the same commitment
+give $h_1^{\rho - \rho'} \prod_j g_j^{v_j - v'_j} = 1$, a non-trivial
+relation among the generators, which nobody should be able to find. The
+theorems of the development conclude ``\ldots or a binding break'', i.e.\
+they exhibit such a relation when extraction fails
+(\rocq{binding\_break}). It is \emph{homomorphic}: $\com(v; \rho) \cdot
+\com(v'; \rho') = \com(v + v'; \rho + \rho')$, so a verifier can derive a
+commitment to $v - \mathbf{1}$ from one to $v$ by multiplying with
+$\com(-\mathbf{1}; 0)$.
+
+\ex{Take $h_1 = 32$, $g_1 = 34$, $g_2 = 8$ (all in the order-$23$
+subgroup). Then $\com((1, 0); 4) = 32^4 \cdot 34 = 16$, $\com((0, 1); 2) =
+32^2 \cdot 8 = 14$, and their product $16 \cdot 14 = 36 = \com((1, 1); 6)$.}
+
+\subsection{$\Sigma$-protocols}\label{sec:sigma}
+A \emph{$\Sigma$-protocol} for a relation $R$ (statement $T$, witness $w$)
+is a three-move interaction: the prover sends an \emph{announcement} $A$,
+the verifier a uniformly random \emph{challenge} $c \in \Z_q$, the prover a
+\emph{response} $z$, and the verifier accepts or rejects $(T, A, c, z)$.
+Three properties:
+\begin{itemize}[nosep]
+  \item \emph{Completeness}: an honest prover with a witness is accepted.
+  \item \emph{Special soundness}: from two accepting transcripts $(A, c,
+  z)$ and $(A, c', z')$ with the same announcement and $c \ne c'$, a
+  witness can be computed. This is what the mechanised soundness theorems
+  state: they take the two transcripts as hypotheses and output the
+  witness (``rewinding form''). The on-paper step that turns it into ``a
+  prover accepted with probability $\varepsilon$ knows a witness'' is the
+  forking lemma.
+  \item \emph{Special honest-verifier zero-knowledge (SHVZK)}: for every
+  challenge $c$ there is a simulator that, from $T$ and $c$ alone, outputs
+  $(A, z)$ distributed exactly as in a real transcript with that
+  challenge. The development states this as a \emph{permutation}: the list
+  of (transcript, probability) pairs of the real prover over its
+  randomness is a permutation of the simulator's list. Perfect, not
+  computational.
+\end{itemize}
+
+\paragraph{Schnorr} Statement $T = g^w$; announcement $A = g^a$ for random
+$a$; response $z = a + c w$; check $g^z = A \cdot T^c$. Completeness:
+$g^{a + cw} = g^a (g^w)^c$. Special soundness: from $g^z = A T^c$ and
+$g^{z'} = A T^{c'}$, dividing, $g^{z - z'} = T^{c - c'}$, so $w = (z -
+z')/(c - c')$. SHVZK: the simulator picks $z$ uniformly and sets $A = g^z
+T^{-c}$; the map $a \mapsto z = a + cw$ is a bijection of $\Z_q$, so real and
+simulated transcripts have the same distribution.
+
+\ex{$w = 5$, $T = h = 32$. Prover: $a = 9$, $A = 2^9 = 42$. Challenge $c =
+6$. Response $z = 9 + 6 \cdot 5 = 39 \equiv 16 \pmod{23}$. Check: $2^{16} =
+18$ and $42 \cdot 32^6 = 18$.}
+
+\paragraph{Chaum--Pedersen} The same with two bases: prove that $(T_1, T_2)
+= (g^w, k^w)$ for public $g, k$: $A = (g^a, k^a)$, $z = a + cw$, check
+$g^z = A_1 T_1^c$ and $k^z = A_2 T_2^c$. This proves that a ciphertext
+$(c_1, c_2)$ encrypts a given $v$: $(c_1, c_2 / g^v) = (g^r, h^r)$ is a
+Chaum--Pedersen statement with witness $r$ and bases $g, h$. It also proves
+correct decryption: $(h, \Dec(c)^{-1} c_2) = (g^x, c_1^x)$ with witness
+$x$. The development calls these \rocq{EncProof} (for one message) and
+\rocq{DecProof}.
+
+\paragraph{OR-composition and membership proofs} To prove that a ciphertext
+encrypts \emph{one of} $v_1, \ldots, v_n$ without saying which, the prover
+runs the Chaum--Pedersen protocol for the true branch and \emph{simulates}
+the others (Cramer, Damg{\aa}rd, and Schoenmakers~\cite{cds}): it picks challenges
+$c_k$ and responses $z_k$ for every false branch $k$ and computes their
+announcements from the verification equation; it computes the true branch's
+announcement honestly; after receiving the challenge $c$ it sets the true
+branch's challenge to $c - \sum_{k \ne \text{true}} c_k$ and answers it.
+The verifier checks every branch and that the branch challenges sum to
+$c$. Special soundness: two transcripts with $c \ne c'$ differ in at least
+one branch's challenge, and that branch yields a witness, i.e.\ the
+randomness $r$ of $\Enc(v_k; r)$ for some $k$; so the ciphertext encrypts
+one of the messages. SHVZK: simulate all branches. The cost is linear in
+$n$: one Chaum--Pedersen transcript per branch. This is \rocq{EncProof}
+over a list of messages, and ``the plaintext is in a public set'' is called
+a \emph{membership proof} below.
+
+\ex{Prove that $C = \Enc(1; 3) = (8, 18)$ encrypts $0$ or $1$. Branch $0$
+(false) is simulated: pick $c_0 = 4$, $z_0 = 11$, set $A_0 = (g^{z_0}
+C_1^{-c_0}, h^{z_0} C_2^{-c_0}) = (24, 28)$. Branch $1$ (true) is honest:
+$a_1 = 10$, $A_1 = (g^{10}, h^{10}) = (37, 16)$. Challenge $c = 9$; then
+$c_1 = 9 - 4 = 5$ and $z_1 = 10 + 5 \cdot 3 = 25 \equiv 2$. The verifier
+checks $c_0 + c_1 = 9$, branch $0$: $g^{11} = A_{0,1} C_1^{4}$ and
+$h^{11} = A_{0,2} C_2^{4}$ (true by construction), branch $1$: $g^{2} = 4 =
+37 \cdot 8^{5}$ and $h^{2} = 37 = 16 \cdot (18 / 2)^{5}$. Both hold.}
+
+\paragraph{Fiat--Shamir} The interaction is removed by computing the
+challenge as a hash of the statement and the announcement, $c = H(T,
+A)$~\cite{fiatshamir};
+the verifier recomputes it. In the ballot the hash also takes the voter's
+credential, so that a ballot copied under another credential is rejected.
+The mechanised theorems are stated for an arbitrary function $H$; the
+random-oracle argument that turns special soundness into non-interactive
+soundness is on paper.
+
+\subsection{A $\Sigma$-protocol for the preimage of a linear map}\label{sec:linsigma}
+Let $V$ be a vector space over $\Z_q$ (written additively) and $\varphi :
+\Z_q^W \to V$ a linear map. To prove knowledge of $w$ with $\varphi(w) =
+T$, the protocol of Maurer~\cite{maurer} is:
+\[
+  A = \varphi(a) \text{ for random } a \in \Z_q^W, \qquad
+  z = a + c\,w, \qquad
+  \text{check } \varphi(z) = A + c\,T .
+\]
+Schnorr is the case $V = \G$ (written multiplicatively), $\varphi(w) =
+g^w$; Okamoto's representation proof is $\varphi(w_1, w_2) = g^{w_1}
+h^{w_2}$; and a product $V = \G^{k} \times \Z_q^{l}$ lets one proof cover
+$k$ group equations and $l$ field equations with a single challenge and a
+single response vector. This is \rocq{Crypto/LinearSigma.v}.
+
+\begin{lemma}[\rocq{lin\_completeness}, \rocq{lin\_soundness}, \rocq{lin\_shvzk}]
+The protocol is complete, special sound with extractor $w = (z - z')/(c -
+c')$, and perfectly SHVZK.
+\end{lemma}
+\begin{proof}
+Completeness: $\varphi(a + cw) = \varphi(a) + c\,\varphi(w) = A + cT$ by
+linearity. Special soundness: subtracting the two verification equations,
+$\varphi(z - z') = (c - c') T$, so $\varphi\big((z - z')/(c - c')\big) =
+T$ by linearity, since $c - c' \ne 0$ is invertible in $\Z_q$. SHVZK: the
+simulator draws $z$ uniformly in $\Z_q^W$ and sets $A = \varphi(z) - cT$;
+in the real protocol $z = a + cw$ with $a$ uniform, and $a \mapsto a + cw$
+is a bijection of $\Z_q^W$ with inverse $z \mapsto z - cw$, under which the
+real announcement $\varphi(a) = \varphi(z - cw) = \varphi(z) - cT$ is the
+simulated one. So the two distributions are the same list up to the order
+in which the randomness is enumerated (\rocq{zk\_of\_bijection}).
+\end{proof}
+
+\subsection{The Bayer--Groth zero argument}\label{sec:zero}
+For a challenge $y \in \Z_q$ define the bilinear map on vectors of length
+$n$,
+\[
+  a \star_y b = \sum_{j=1}^{n} y^{j} a_j b_j .
+\]
+The \emph{zero argument} takes commitments $C_{a_1}, \ldots, C_{a_r}$ and
+$C_{b_1}, \ldots, C_{b_r}$ to vectors $a_i, b_i \in \Z_q^n$ and proves
+$\sum_{i=1}^{r} a_i \star_y b_i = 0$. It is the sub-argument of the
+Hadamard argument in Bayer and Groth's shuffle~\cite{bayergroth}, built on
+the bilinear-map technique of Groth~\cite{groth09}; the development mechanises
+it in the form of the Swiss Post specification (\rocq{BayerGroth.v},
+\rocq{zero\_verify}, \rocq{zero\_prove}). We use it as a black box with
+three properties:
+\begin{itemize}[nosep]
+  \item completeness for honest openings satisfying the relation
+  (\rocq{zero\_completeness});
+  \item $(2r{+}1)$-special soundness: from $2r+1$ accepting transcripts
+  with distinct challenges $x$ on the same announcement, openings of all
+  $C_{a_i}, C_{b_i}$ satisfying $\sum_i a_i \star_y b_i = 0$ are
+  extracted, or a binding break of the commitment key
+  (\rocq{zero\_soundness}, \rocq{BayerGrothSound.v});
+  \item perfect SHVZK, given the discrete logarithms of the commitment key
+  in base $h_1$ (\rocq{zero\_shvzk}).
+\end{itemize}
+Why the relation is useful: read $\sum_i a_i \star_y b_i = \sum_j y^j
+\big(\sum_i a_{ij} b_{ij}\big)$ as a polynomial in $y$ of degree $n$ whose
+coefficient at $y^j$ is $\sum_i a_{ij} b_{ij}$. A non-zero polynomial of
+degree $n$ has at most $n$ roots in the field (the one-variable case of
+the Schwartz--Zippel lemma~\cite{schwartz,zippel}). So if the relation holds for
+$n$ distinct non-zero values of $y$, every coefficient is zero, i.e.\
+$\sum_i a_{ij} b_{ij} = 0$ \emph{for every coordinate $j$}. With a single
+random $y$ (Fiat--Shamir), the relation holds for a false statement with
+probability at most $n/q$. Two instances matter for us:
+\begin{itemize}[nosep]
+  \item $r = 2$, $a = (b, p)$, $b = (\delta, -\mathbf{1})$: the coordinate
+  relations are $b_j \delta_j - p_j = 0$, i.e.\ $p = b \circ \delta$
+  (entry-wise product, ``Hadamard'');
+  \item $r = 1$, $a = X$, $b = X - \mathbf{1}$: the relations are $X_j (X_j
+  - 1) = 0$, i.e.\ every $X_j$ is a bit.
+\end{itemize}
+
+The argument itself is short. Take one row, $r = 1$: the claim is $a
+\star_y c = 0$ for committed vectors $a$ and $c$. The prover draws
+blinding vectors $a_0, c_0 \in \Z_q^n$ and sets
+\[
+  A(x) = a_0 + x\,a, \qquad C(x) = x\,c + c_0, \qquad
+  A(x) \star_y C(x) = d_0 + x\,d_1 + x^2\,(a \star_y c),
+\]
+with $d_0 = a_0 \star_y c_0$ and $d_1 = a_0 \star_y c + a \star_y c_0$. It
+announces $\com(a_0)$, $\com(c_0)$, and commitments $D_0, D_1$ to the
+scalars $d_0, d_1$ (over the first generator: $\com(d; t) = h_1^t
+g_1^d$), receives the challenge $x$, and answers with $A(x)$, $C(x)$, and
+the combined randomness. The verifier checks three equations:
+\[
+  \com(A(x)) = \com(a_0) \cdot C_a^{\,x}, \qquad
+  \com(C(x)) = C_c^{\,x} \cdot \com(c_0), \qquad
+  \com\big(A(x) \star_y C(x)\big) = D_0 \cdot D_1^{\,x}.
+\]
+There is no commitment for the coefficient of $x^2$, so the last equation
+can hold for many $x$ only if that coefficient, $a \star_y c$, is zero:
+three accepting challenges on one announcement determine the
+degree-$2$ polynomial, which is the $3$-special soundness. With $r$ rows
+the prover uses polynomials of degree $r$ in $x$ and commits to the $2r$
+coefficients other than the one claimed to be zero, which is why $2r + 1$
+challenges are needed. The blinding vectors make $A(x)$ and $C(x)$
+uniform, which is where zero-knowledge comes from. The development
+mechanises the Swiss Post form of the argument~\cite{swisspost}, which
+arranges the same polynomial with different indexing.
+
+\section{The protocols, step by step}\label{sec:steps}
+This section runs through each protocol once, from what the voter knows
+to what the verifier checks: the first ballot, the batched ballot, and
+the simplified batched ballot, which is the batched ballot with its two
+linear checks moved into the verifier and its three zero arguments merged
+into one. Every step uses only the tools of
+Section~\ref{sec:tools} and the steps before it. The later sections give
+the proofs, the costs, and the Rocq names; this one gives the protocols.
+The numbers are in the toy group ($p = 47$, $q = 23$, $g = 2$, $x = 5$, $h
+= 32$). The first protocol is shown on ballot 1, $A > B = C$, and the two
+batched ones on $A > B > C$, whose ciphertexts and commitments are those of
+Section~\ref{sec:walk}.
+
+\subsection{What every protocol must prove}
+The voter's ranking is a position vector $s \in \{0, \ldots, m\}^m$: $s_i$
+is the position of candidate $i$, a smaller position is better, and equal
+positions are ties. The tally needs, for every ordered pair $(i, j)$, the
+encrypted bit
+\[
+  b_{ij} = [\, s_i < s_j \,] = [\, \delta_{ij} \ge 1 \,], \qquad
+  \delta_{ij} = s_j - s_i \in \{-m, \ldots, m\}.
+\]
+A ballot is valid when every posted bit ciphertext encrypts $[s_i < s_j]$
+for one and the same $s$. A dishonest voter has two ways to break this.
+The first is to encrypt a value that is not a bit, such as $5$, which adds
+five to a margin. The second is to encrypt bits that come from no single
+ranking, such as $b_{AB} = b_{BA} = 1$ or the cycle $b_{AB} = b_{BC} =
+b_{CA} = 1$. Both protocols therefore prove three things: every $b_{ij}$
+is a bit, all bits are anchored to one position vector, and each bit
+agrees with the sign of its difference. The first protocol proves them
+ciphertext by ciphertext with disjunctions; the batched protocol proves
+them for whole vectors with arithmetic.
+
+\subsection{The first protocol}
+
+\subsubsection*{Step 1: encrypt the positions and the bits}
+The voter posts $\Enc(s_i; r_i)$ for every candidate $i$ and $\Enc(b_{ij};
+r_{ij})$ for every ordered pair. Only the bit ciphertexts are aggregated;
+the position ciphertexts exist so that the bits can be checked against
+them.
+
+\ex{Ballot 1 is $s = (0, 1, 1)$. With $r_A = 3$ and $r_B = 7$, the voter
+posts $\Enc(s_A) = \Enc(0; 3) = (8, 9)$ and $\Enc(s_B) = \Enc(1; 7) = (34,
+14)$. The bit $b_{AB} = 1$ is encrypted with randomness $5$: $\Enc(1; 5) =
+(2^5, 2 \cdot 32^5) = (32, 8)$.}
+
+\subsubsection*{Step 2: the verifier derives every difference}
+The voter never posts $\delta$. The verifier computes it with the
+homomorphism,
+\[
+  \Enc(\delta_{ij}) = \Enc(s_j) / \Enc(s_i) = \Enc(s_j - s_i;\; r_j - r_i).
+\]
+This is the \emph{anchoring}: all $m^2$ differences come from the same $m$
+position ciphertexts, so $\delta_{BA} = -\delta_{AB}$ and $\delta_{AB} +
+\delta_{BC} = \delta_{AC}$ hold automatically, and no voter can pick
+differences that no ranking has.
+
+\ex{$\Enc(\delta_{AB}) = (34, 14) / (8, 9) = (16, 12) = \Enc(1; 7 - 3) =
+\Enc(1; 4)$.}
+
+\subsubsection*{Step 3: merge the two cases into one ciphertext}
+The bit must satisfy $(b_{ij} = 1 \wedge \delta_{ij} \ge 1) \vee (b_{ij} =
+0 \wedge \delta_{ij} \le 0)$. To check both halves with a single
+ciphertext, the verifier computes, again by the homomorphism, the
+\emph{shifted} ciphertext
+\[
+  \Enc(b_{ij})^{K} \cdot \Enc(\delta_{ij}) = \Enc(K b_{ij} + \delta_{ij};\;
+  K r_{ij} + r_j - r_i), \qquad K = 2m + 1 .
+\]
+Its plaintext $t = K b_{ij} + \delta_{ij}$ is in $\{-m, \ldots, 0\}$
+exactly when $b_{ij} = 0$ and $\delta_{ij} \le 0$, and in $\{K + 1,
+\ldots, K + m\}$ exactly when $b_{ij} = 1$ and $\delta_{ij} \ge 1$. The
+gap $\{1, \ldots, K\}$ between the two ranges catches every wrong pair:
+$b = 1$ with $\delta \le 0$ gives $t \in \{K - m, \ldots, K\}$, and $b =
+0$ with $\delta \ge 1$ gives $t \in \{1, \ldots, m\}$.
+
+\ex{$m = 3$, so $K = 7$ and the allowed set is $S_{\mathrm{pair}} = \{0,
+-1, -2, -3, 8, 9, 10\}$. For $(A, B)$: $(32, 8)^7 \cdot (16, 12) = (7, 12)
+\cdot (16, 12) = (18, 3) = \Enc(7 + 1; 7 \cdot 5 + 4) = \Enc(8; 16)$, and
+$8 \in S_{\mathrm{pair}}$. A voter who claims $b_{BA} = 1$, encrypted as
+$\Enc(1; 5)$, gets the shifted ciphertext $\Enc(1; 5)^7 \cdot (8, 9) / (34,
+14) = (21, 1)$, which encrypts $7 - 1 = 6 \notin S_{\mathrm{pair}}$.}
+
+\subsubsection*{Step 4: everything is now a membership claim}
+After Steps 2 and 3, validity is three kinds of claim, each of the form
+``this ciphertext encrypts one of a public list of messages'':
+\begin{itemize}[nosep]
+  \item every $\Enc(s_i)$ encrypts one of $0, 1, \ldots, m$ ($m + 1$
+  messages);
+  \item every $\Enc(b_{ij})$ encrypts one of $0, 1$ ($2$ messages);
+  \item every shifted ciphertext encrypts one of $S_{\mathrm{pair}}$ ($2m
+  + 1$ messages).
+\end{itemize}
+The bit claim is needed separately because the gap argument of Step 3
+assumes $b \in \{0, 1\}$; the position claim is needed because it assumes
+$|\delta| \le m$. Steps 5 to 8 build the membership proof from
+Chaum--Pedersen proofs.
+
+\subsubsection*{Step 5: one message is one Chaum--Pedersen proof}
+A ciphertext $(C_1, C_2)$ encrypts $\mu$ with randomness $r$ exactly when
+\[
+  C_1 = g^{r} \quad\text{and}\quad C_2 / g^{\mu} = h^{r},
+\]
+one exponent $r$ for two bases. The Chaum--Pedersen proof of
+Section~\ref{sec:sigma} proves this. The prover picks $u$ and announces $(a_1,
+a_2) = (g^{u}, h^{u})$, receives a challenge $e$, and answers $z = u + e
+r$. The verifier checks $g^{z} = a_1 C_1^{e}$ and $h^{z} = a_2 (C_2 /
+g^{\mu})^{e}$. The single response $z$ for both equations is what forces
+the same $r$: if $\mu$ is the wrong message, then $C_2 / g^{\mu} = h^{r}
+g^{\mu_{\mathrm{true}} - \mu}$ is not a power of $h$ with exponent $r$,
+and no $z$ satisfies both equations for more than one $e$.
+
+\subsubsection*{Step 6: simulate the messages you did not encrypt}
+For any $\mu$, true or false, an accepting transcript can be produced
+without $r$ by choosing the challenge first. Pick $e$ and $z$, then set
+\[
+  a_1 = g^{z} / C_1^{e}, \qquad a_2 = h^{z} / (C_2 / g^{\mu})^{e}.
+\]
+Both checks of Step 5 then hold by construction. This is the simulator
+behind SHVZK, and it is also what lets the prover handle the messages that
+are not the plaintext.
+
+\subsubsection*{Step 7: give the true message the leftover challenge}
+To prove ``one of $\mu_1, \ldots, \mu_\ell$'' when the plaintext is
+$\mu_{i^*}$, the prover:
+\begin{enumerate}[nosep]
+  \item simulates every false branch $i \ne i^*$ as in Step 6, choosing
+  $e_i$ and $z_i$ and computing its announcement;
+  \item announces the true branch honestly, $(g^{u}, h^{u})$;
+  \item receives the single challenge $e$;
+  \item sets $e_{i^*} = e - \sum_{i \ne i^*} e_i$ and answers $z_{i^*} = u
+  + e_{i^*} r$;
+  \item sends all announcements, all $e_i$, and all $z_i$.
+\end{enumerate}
+The verifier checks that $\sum_i e_i = e$ and that every branch passes the
+two equations of Step 5 with its own $e_i$. Real and simulated branches
+are identically distributed, and the $e_i$ are uniform apart from their
+sum, so the transcript does not reveal $i^*$.
+
+\ex{The bit proof for $\Enc(b_{AB}) = (32, 8)$, messages $\{0, 1\}$, true
+branch $\mu = 1$ with $r = 5$, challenge $e = 15$.
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+ & branch $\mu = 0$ (simulated) & branch $\mu = 1$ (true) \\
+\midrule
+prover picks & $e_0 = 9$, $z_0 = 11$ & $u = 6$ \\
+announcement & $(2^{11} \cdot 32^{-9},\; 32^{11} \cdot 8^{-9}) = (7, 32)$ & $(2^6, 32^6) = (17, 34)$ \\
+challenge & $e_0 = 9$ & $e_1 = 15 - 9 = 6$ \\
+response & $z_0 = 11$ & $z_1 = 6 + 6 \cdot 5 = 36 \equiv 13$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+The verifier checks $9 + 6 = 15$. For branch $1$: $g^{13} = 14$ and $17
+\cdot 32^{6} = 17 \cdot 34 \equiv 14$; $h^{13} = 3$ and $34 \cdot (8 /
+2)^{6} = 34 \cdot 7 \equiv 3$. Branch $0$ holds by construction.}
+
+\subsubsection*{Step 8: why a false claim cannot be proved}
+All announcements are fixed before $e$ is known. In a false branch the
+prover can answer only the one challenge it chose in advance. If every
+branch is false, the sum check $\sum_i e_i = e$ then holds for a single
+value of $e$, probability $1/q$. The extractor states the same fact
+exactly: two accepting transcripts with the same announcements and $e \ne
+e'$ must differ in some branch's challenge, and that branch gives $r =
+(z_i - z'_i) / (e_i - e'_i)$, so its message is the plaintext.
+
+\ex{Rerun the bit proof above with the same announcements and $e' = 4$.
+The simulated branch keeps $e_0 = 9$, so $e'_1 = 4 - 9 \equiv 18$ and
+$z'_1 = 6 + 18 \cdot 5 \equiv 4$. From the two runs, $r = (13 - 4)/(6 -
+18) = 9 / 11 \equiv 9 \cdot 21 \equiv 5$, the randomness of $\Enc(b_{AB})$;
+so branch $\mu = 1$ is the true one.}
+
+\subsubsection*{Step 9: prove every claim of the ballot}
+The voter runs Step 7 once for each claim of Step 4. Each has its own true
+branch.
+
+\ex{The position proof for $\Enc(s_A) = (8, 9)$, messages $\{0, 1, 2,
+3\}$, true branch $0$ with $r_A = 3$, $e = 15$. The simulated branches use
+$(e_i, z_i) = (5, 2), (17, 9), (20, 14)$ for $i = 1, 2, 3$, with
+announcements $(37, 42), (16, 21), (1, 28)$. The true branch announces
+$(g^{10}, h^{10}) = (37, 16)$, receives $e_0 = 15 - (5 + 17 + 20) \equiv
+19$, and answers $z_0 = 10 + 19 \cdot 3 \equiv 21$. Check: $g^{21} = 12 =
+37 \cdot 8^{19}$ and $h^{21} = 14 = 16 \cdot 9^{19}$.
+
+The consistency proof for $(A, B)$ is on the shifted ciphertext $(18, 3) =
+\Enc(8; 16)$, with seven branches in the order of the message list:
+\begin{center}
+\begin{tabular}{@{}lccccccc@{}}
+\toprule
+branch $\mu$ & $0$ & $-1$ & $-2$ & $-3$ & $\mathbf{8}$ & $9$ & $10$ \\
+\midrule
+announcement & $(8,28)$ & $(27,17)$ & $(2,27)$ & $(17,4)$ & $(7,28)$ & $(16,34)$ & $(1,4)$ \\
+$e_\mu$ & $3$ & $8$ & $4$ & $13$ & $\mathbf{22}$ & $10$ & $1$ \\
+$z_\mu$ & $5$ & $1$ & $19$ & $7$ & $\mathbf{19}$ & $3$ & $16$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+The true branch $\mu = 8$ uses $u = 12$, gets $e_8 = 15 - (3 + 8 + 4 + 13
++ 10 + 1) \equiv 22$, and answers $z_8 = 12 + 22 \cdot 16 \equiv 19$.
+Check: $g^{19} = 3 = 7 \cdot 18^{22}$ and $h^{19} = 8 = 28 \cdot (3 /
+g^{8})^{22} = 28 \cdot 27^{22}$. All seven challenges sum to $15$.}
+
+\subsubsection*{Step 10: one challenge for the whole ballot}
+In the non-interactive ballot every proof uses the same challenge $e = H(\ldots)$, the
+hash of all ciphertexts and all announcements of the ballot
+(\rocq{ballot\_challenge}). The voter first computes every announcement:
+the simulated branches need only their own $e_i, z_i$, and the true
+branches need only $u$. The voter then hashes and answers each true
+branch. Changing any ciphertext or announcement changes $e$, so the voter
+cannot choose the challenge after the fact.
+
+\subsubsection*{Step 11: what the verifier does}
+The verifier (\rocq{nizk\_verify\_ballot}):
+\begin{enumerate}[nosep]
+  \item recomputes $e$ and checks that every proof is bound to it
+  (\rocq{challenges\_are});
+  \item for every candidate $i$, checks the $(m+1)$-branch proof on
+  $\Enc(s_i)$;
+  \item for every pair $(i, j)$, checks the $2$-branch proof on
+  $\Enc(b_{ij})$, computes $\Enc(\delta_{ij})$ and the shifted ciphertext,
+  and checks the $(2m+1)$-branch proof on it;
+  \item if everything passes, adds the $\Enc(b_{ij})$ to the encrypted
+  margins.
+\end{enumerate}
+Accepted means valid: the position proofs fix one $s$, the bit proofs make
+each $b_{ij}$ a bit, and the consistency proofs with the gap of Step 3
+give $b_{ij} = [s_i < s_j]$ (Theorem~\ref{thm:b1sound}). Ballot 1 carries
+$3 \cdot 4 + 9 \cdot 2 + 9 \cdot 7 = 93$ Chaum--Pedersen transcripts; in
+general about $2m^3$, which is $6.2$\,MB at $m = 17$.
+
+\subsection{The batched protocol}
+The first protocol pays $2m^3$ transcripts because every comparison is a
+disjunction over a range. The batched protocol removes the disjunctions:
+it rewrites ``$b_{ij} = [s_i < s_j]$'' as linear equations, entry-wise
+products, and ``this entry is a bit'', and proves each kind for a whole
+committed vector at once. Write $n = m^2$, index cell $(i, j)$ by $k = im
++ j$, and let $L = \lceil \log_2(m + 1) \rceil$.
+
+\subsubsection*{Step 1: replace the disjunction by arithmetic}
+The difference vector is a public linear function of the positions,
+$\delta = Ms$, where row $(i, j)$ of the $n \times m$ matrix $M$ is $e_j -
+e_i$ ($-1$ in column $i$, $+1$ in column $j$). $M$ depends only on $m$,
+and the verifier computes it as part of the protocol.
+
+Because $\delta_{ij}$ is an integer, the two cases of validity are
+\begin{itemize}[nosep]
+  \item $b_{ij} = 1$: $\delta_{ij} \ge 1$, that is, $\delta_{ij} - 1 \ge 0$;
+  \item $b_{ij} = 0$: $\delta_{ij} \le 0$, that is, $-\delta_{ij} \ge 0$.
+\end{itemize}
+One expression selects the right left-hand side for either value of the
+bit:
+\[
+  v = b(\delta - 1) + (1 - b)(-\delta) = -\delta + 2\, b \circ \delta - b .
+\]
+So validity is equivalent to ``$b$ is a bit and $v \ge 0$''. A field has
+no order, so $v \ge 0$ is proved by writing $v$ in binary:
+\[
+  v = \sum_{t < L} 2^{t} X^{(t)}, \qquad X^{(t)} \in \{0, 1\}^{n}.
+\]
+$L$ bits suffice because $v_k \le m$. The product $b \circ \delta$
+multiplies two secret vectors, which no linear proof can check. The voter
+therefore commits to it as a vector of its own, $p = b \circ \delta$, and
+proves the product separately. The statement is
+\[
+  \delta = M s, \qquad p = b \circ \delta, \qquad v = -\delta + 2p - b =
+  \sum_{t < L} 2^{t} X^{(t)}, \qquad b, X^{(0)}, \ldots, X^{(L-1)} \in
+  \{0, 1\}^{n}.
+\]
+The first and third are linear in the committed vectors; the second and
+the bit conditions are entry-wise products.
+
+\ex{$A > B > C$, $s = (0, 1, 2)$, $L = 2$:
+\begin{center}
+\begin{tabular}{@{}lrrrrrrrrr@{}}
+\toprule
+ & $AA$ & $AB$ & $AC$ & $BA$ & $BB$ & $BC$ & $CA$ & $CB$ & $CC$ \\
+\midrule
+$\delta$ & $0$ & $1$ & $2$ & $-1$ & $0$ & $1$ & $-2$ & $-1$ & $0$ \\
+$b$ & $0$ & $1$ & $1$ & $0$ & $0$ & $1$ & $0$ & $0$ & $0$ \\
+$p$ & $0$ & $1$ & $2$ & $0$ & $0$ & $1$ & $0$ & $0$ & $0$ \\
+$v$ & $0$ & $0$ & $1$ & $1$ & $0$ & $0$ & $2$ & $1$ & $0$ \\
+$X^{(0)}$ & $0$ & $0$ & $1$ & $1$ & $0$ & $0$ & $0$ & $1$ & $0$ \\
+$X^{(1)}$ & $0$ & $0$ & $0$ & $0$ & $0$ & $0$ & $1$ & $0$ & $0$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+Cell $AC$: $v = -2 + 2 \cdot 2 - 1 = 1 = 1 + 2 \cdot 0$. Cell $CA$: $v = 2
++ 0 - 0 = 2 = 0 + 2 \cdot 1$.}
+
+\subsubsection*{Step 2: encrypt the bits, commit to everything else}
+The voter posts the $n$ ciphertexts $c_k = \Enc(b_k; r_k)$, the only values
+that are aggregated, and five Pedersen vector commitments
+(Section~\ref{sec:tools}):
+\begin{center}
+\begin{tabular}{@{}llll@{}}
+\toprule
+commitment & vector & length & key \\
+\midrule
+$C_s = \com(s; \rho_s)$ & positions & $m$ & $\mathbf{g}_1$ \\
+$C_\delta = \com(\delta; \rho_\delta)$ & differences & $n$ & $\mathbf{g}_1$ \\
+$C_b = \com(b; \rho_b)$ & bits & $n$ & $\mathbf{g}_1$ \\
+$C_p = \com(p; \rho_p)$ & products & $n$ & $\mathbf{g}_1$ \\
+$C_X = \com(X; \rho_X)$ & binary digits & $Ln$ & $\mathbf{g}_2$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+The vector $X = X^{(0)} \,\|\, X^{(1)} \,\|\, \cdots \,\|\, X^{(L-1)}$ stacks
+the bit vectors one after another, so entry $tn + k$ is bit $t$ of $v_k$,
+and the verifier rebuilds $v_k = \sum_t 2^{t} X_{tn + k}$. The positions
+are committed, not encrypted: nothing ever decrypts them.
+
+$X$ is longer than the other vectors, so it needs a longer key; the
+development uses an independent key $\mathbf{g}_2$ of length $Ln$. A single
+key of length $Ln$, with the shorter vectors committed under its first
+$n$ generators, would do as well. What soundness needs is that no
+discrete-logarithm relation among $h_1$ and the generators is known, and
+that the commitments combined in one zero argument (Step 5) share a key,
+since that argument works entry by entry.
+
+\ex{For $A > B > C$ and $m = 3$: $X = (0,0,1,1,0,0,0,1,0 \,\|\,
+0,0,0,0,0,0,1,0,0)$, of length $18$. Cell $CA$ ($k = 6$) reads entries $6$
+and $15$: $v_{CA} = 0 + 2 \cdot 1 = 2$. With the keys and randomness of
+Section~\ref{sec:walk}, $C_s = 42$, $C_\delta = 27$, $C_b = 4$, $C_p = 17$,
+and $C_X = 4$.}
+
+\subsubsection*{Step 3: the verifier's first challenges}
+Once the ciphertexts and commitments are posted, the verifier draws three
+coefficient vectors $\beta, \gamma_1, \gamma_2 \in \Z_q^{n}$ and three
+scalars $y_1, y_2, y_3$. They must come after the commitments: each of them
+compresses many equations into one, and the compression is sound only for
+coefficients the voter could not foresee (Steps 4 and 5).
+
+\subsubsection*{Step 4: one linear argument for every linear fact}
+Three facts are linear in the committed values: the ciphertexts encrypt
+the committed $b$, $\delta = Ms$, and $v = -\delta + 2p - b$ in binary.
+Checking each entry would cost $n$ equations per fact. Random coefficients
+compress each fact to one equation.
+\begin{itemize}
+  \item \emph{The link to the ciphertexts.} Everyone computes $C_\beta =
+  \prod_k c_k^{\beta_k} = \Enc(\langle \beta, b^{\mathrm{true}} \rangle;\,
+  R)$ with $R = \langle \beta, r \rangle$, by the homomorphism. The voter
+  proves $C_\beta = (g^{R},\, g^{\langle \beta, b \rangle} h^{R})$ for the
+  \emph{committed} $b$. If $b \ne b^{\mathrm{true}}$, the two inner
+  products agree for a $1/q$ fraction of the $\beta$ only (Bellare, Garay,
+  and Rabin~\cite{bgr98}).
+  \item \emph{The anchoring.} The voter proves $\langle \gamma_1,\, \delta -
+  Ms \rangle = \sum_k \gamma_{1,k} (\delta_k - (s_j - s_i)) = 0$.
+  \item \emph{The binary expansion.} The voter proves $\langle \gamma_2,\,
+  \sum_t 2^{t} X^{(t)} + \delta - 2p + b \rangle = 0$.
+\end{itemize}
+A non-zero vector is orthogonal to a random $\gamma$ with probability
+$1/q$, so the two field equations stand for all $2n$ entry-wise ones.
+
+All three facts, together with ``the five commitments open to these
+vectors'', are one statement: knowledge of
+\[
+  w = (s, \delta, b, p, X, \rho_s, \rho_\delta, \rho_b, \rho_p, \rho_X, R)
+  \in \Z_q^{W}, \qquad W = m + 3n + Ln + 6,
+\]
+with $\varphi(w) = T$ for the linear map $\varphi : \Z_q^{W} \to \G^{7}
+\times \Z_q^{2}$ whose nine rows are
+\begin{align*}
+  &\com(s; \rho_s),\ \com(\delta; \rho_\delta),\ \com(b; \rho_b),\ \com(p;
+  \rho_p),\ \com(X; \rho_X),\ g^{R},\ g^{\langle \beta, b \rangle} h^{R},\\
+  &\langle \gamma_1, \delta - Ms \rangle,\quad \textstyle\langle \gamma_2,
+  \sum_t 2^{t} X^{(t)} + \delta - 2p + b \rangle,
+\end{align*}
+and target $T = (C_s, C_\delta, C_b, C_p, C_X, C_{\beta,1}, C_{\beta,2}, 0,
+0)$. Every row is linear in $w$, so the protocol of
+Section~\ref{sec:linsigma} proves it: the voter announces $A = \varphi(a)$
+for random $a \in \Z_q^{W}$, receives $c$, and answers $z = a + c w$; the
+verifier checks $\varphi(z) = A + c T$, which is seven group equations and
+two field equations. Because one response vector $z$ serves all nine rows,
+the $b$ in the link row is the $b$ that opens $C_b$, and likewise for the
+other shared vectors.
+
+\subsubsection*{Step 5: three zero arguments for the products}
+The remaining facts are entry-wise products, which the linear argument
+cannot express. Each is one Bayer--Groth zero argument
+(Section~\ref{sec:zero}) on the commitments of Step 2:
+\begin{enumerate}[nosep]
+  \item $b \circ \delta - p = 0$: rows $(C_b, C_p)$ against $(C_\delta,
+  \com(-\mathbf{1}; 0))$, at $y_1$;
+  \item $X \circ (X - \mathbf{1}) = 0$: row $C_X$ against $C_X \cdot
+  \com(-\mathbf{1}; 0)$, at $y_2$;
+  \item $b \circ (b - \mathbf{1}) = 0$: row $C_b$ against $C_b \cdot
+  \com(-\mathbf{1}; 0)$, at $y_3$.
+\end{enumerate}
+The verifier forms the commitments to $X - \mathbf{1}$ and $b - \mathbf{1}$
+itself, by the homomorphism. Each argument proves the single scalar
+equation $\sum_j y^{j} (\text{entry } j) = 0$, a polynomial in $y$ whose
+coefficients are the entries; for a random $y$ a non-zero vector passes
+with probability at most $(\text{length})/q$ (Schwartz--Zippel). Each
+argument has its own announcement and its own second challenge $x_i$.
+
+\subsubsection*{Step 6: answer and verify}
+After the announcements of Steps 4 and 5, the verifier sends $c$ and $x_1,
+x_2, x_3$, and the voter sends the responses. The verifier
+(\rocq{verify\_ballot2}) checks that there are $n$ ciphertexts, the linear
+argument, and the three zero arguments; if all pass, the $c_k$ are added
+to the encrypted margins.
+
+\subsubsection*{Step 7: why accepted means valid}
+The checks combine as follows (Theorem~\ref{thm:b2sound}):
+\begin{enumerate}[nosep]
+  \item the bit arguments make every $b_k$ and every $X_j$ a bit, so $v_k$
+  is an integer in $[0, 2^{L})$, and the field is far larger than $2^{L}$,
+  so nothing wraps around;
+  \item the product argument and the binary row give $v = -\delta + 2 b
+  \circ \delta - b$; hence $b_k = 1$ forces $\delta_k = v_k + 1 \ge 1$ and
+  $b_k = 0$ forces $\delta_k = -v_k \le 0$;
+  \item the anchoring row gives $\delta_{ij} = s_j - s_i$ for one $s$;
+  \item together, $b_{ij} = [s_i < s_j]$, and the link row makes the
+  ciphertexts encrypt exactly this $b$.
+\end{enumerate}
+
+\subsubsection*{Step 8: removing the interaction}
+In the non-interactive ballot the ten challenges are hashes
+(\rocq{challenges\_of}):
+\begin{itemize}[nosep]
+  \item $\beta, \gamma_1, \gamma_2, y_1, y_2, y_3$ from the ciphertexts and
+  the five commitments;
+  \item $c$ from those and the linear announcement $A$;
+  \item $x_i$ from those and the announcement of the $i$-th zero argument.
+\end{itemize}
+Each challenge is hashed only after everything it must bind is fixed. In
+particular $\beta$ and $\gamma$ depend on the commitments, so the voter
+cannot choose $b$, $\delta$, or $X$ after seeing them. The honest voter
+computes the ballot in three passes: the first fixes the ciphertexts and
+commitments, hence $\beta, \gamma, y$; the second fixes $A$, which depends
+on $\beta$ and $\gamma$, hence $c$; the third computes the responses
+(\rocq{nizk\_encrypt\_ballot2}).
+
+\subsubsection*{Step 9: what it costs}
+One linear argument and three zero arguments, each linear in $n$, replace
+the $2m^3$ Chaum--Pedersen transcripts of the first protocol. At $m = 17$
+the batched ballot is $352$\,KB, takes $5.5$\,s to prove and $7.8$\,s to
+verify, against $6.2$\,MB, $130$\,s, and $68$\,s for the first.
+Completeness, special soundness, and SHVZK are machine-checked, and the
+verifier is extracted to OCaml (Section~\ref{sec:mech}).
+
+\subsection{The simplified batched protocol}\label{sec:steps3}
+The batched protocol proves four facts about committed vectors with four
+arguments and ten challenges. Two of the facts are linear, and a verifier
+who holds Pedersen commitments can check a linear fact by multiplying the
+commitments instead of asking for a proof; the two remaining facts are
+Hadamard products, and several of those can share one zero argument. The
+simplified protocol does both. It is the ballot of the paper and of
+\rocq{Frontend/SchulzeSimple.v}; the batched protocol above is its first
+form, kept here because it shows each fact with its own argument. The
+statement is unchanged, so Step~1 of the batched protocol applies
+verbatim: $\delta = Ms$, $p = b \circ \delta$, $v = -\delta + 2p - b =
+\sum_t 2^t X^{(t)}$, and $b, X^{(0)}, \ldots, X^{(L-1)}$ are bit vectors.
+Section~\ref{sec:ballot2sd} gives every number for $A > B > C$ and the
+proofs; this walk gives the protocol.
+
+\subsubsection*{Step 1: let the key compute $\delta = Ms$}
+A Pedersen commitment is a product of powers of the generators, so
+substituting a public linear map into the generators substitutes it into
+the committed vector. For the difference matrix $M$, define the
+\emph{derived key} $g'_i = \prod_k g_k^{M_{ki}}$, one generator per
+candidate, computed by anyone from the key $\mathbf{g}$ and the rule for
+$M$. Then
+\[
+  \com_{\mathbf{g}'}(s; \rho) = h_1^{\rho} \prod_i {g'_i}^{s_i}
+  = h_1^{\rho} \prod_k g_k^{\sum_i M_{ki} s_i} = \com_{\mathbf{g}}(Ms; \rho),
+\]
+so a commitment to $s$ under $\mathbf{g}'$ is, as a group element, a
+commitment to $\delta = Ms$ under $\mathbf{g}$ with the same randomness
+(\rocq{com\_gd}). The voter posts this one element as $C_\delta$; there
+is no $C_s$, and the relation $\delta = Ms$ holds by construction. The
+linear argument will still ask the voter to open $C_\delta$ under
+$\mathbf{g}'$, so that the extractor recovers $s$.
+
+\ex{For $A, B, C$ with $\mathbf{g} = (34, 8, 27, 14, 36, 3, 17, 42, 12)$ in
+the toy group, $g'_A = g_{BA}\, g_{CA}\, g_{AB}^{-1} g_{AC}^{-1} = 32$,
+$g'_B = 8$, $g'_C = 9$ (Section~\ref{sec:ballot2sd}, Step~1), and
+$\com_{\mathbf{g}'}((0, 1, 2); 14) = 32^{14} \cdot 8 \cdot 9^2 = 27$, the
+same element as $\com_{\mathbf{g}}(\delta; 14)$ in
+Section~\ref{sec:walk}.}
+
+\subsubsection*{Step 2: commit under one key}
+The voter posts the $n$ ciphertexts $c_k = \Enc(b_k; r_k)$ and $L + 3$
+commitments, all under the one key $(h_1, \mathbf{g})$ of $n$ generators:
+$C_\delta$ from Step~1, $C_b = \com(b; \rho_b)$, $C_p = \com(p;
+\rho_p)$, and one commitment $C_{X^{(t)}} = \com(X^{(t)};
+\rho_{X^{(t)}})$ per bit level $t < L$. The batched protocol packed the
+bits into one vector of length $Ln$ under a second, longer key; keeping
+the levels apart costs $L - 1$ extra group elements and puts every
+committed vector under the same key, which the next two steps need.
+
+\subsubsection*{Step 3: let the verifier check the binary expansion}
+The expansion $v = \sum_t 2^t X^{(t)}$ with $v = -\delta + 2p - b$ says
+that the vector $\delta + b - 2p + \sum_t 2^t X^{(t)}$ is zero. Every
+term is committed, and the commitment is homomorphic, so the verifier
+multiplies:
+\[
+  C_0 = C_\delta \cdot C_b \cdot C_p^{-2} \cdot \prod_{t < L} C_{X^{(t)}}^{\,2^t}
+  = \com\Big(\delta + b - 2p + \textstyle\sum_t 2^t X^{(t)};\ \rho^*\Big),
+  \qquad
+  \rho^* = \rho_\delta + \rho_b - 2\rho_p + \textstyle\sum_t 2^t \rho_{X^{(t)}} .
+\]
+For an honest voter the committed vector is zero, so $C_0 = h_1^{\rho^*}$,
+and the voter proves knowledge of $\rho^*$: one Schnorr row in the linear
+argument. By binding, this proves the relation entry by entry, where the
+batched protocol proved it in one random direction $\gamma_2$ and needed
+the $n$ one-coordinate variants of $\gamma_2$ to separate the entries.
+
+\ex{With the commitments of Section~\ref{sec:ballot2sd}, $C_0 = 27
+\cdot 4 \cdot 17^{-2} \cdot 42 \cdot 21^{2} = 8 = 32^{19}$, and $\rho^*
+= 14 + 3 - 40 + 9 + 10 \equiv 19$.}
+
+\subsubsection*{Step 4: the first challenges}
+Once the ciphertexts and the $L + 3$ commitments are posted, the verifier
+draws $\beta \in \Z_q^{n}$ for the link to the ciphertexts, as before,
+and two scalars $y$ and $z$ for the zero argument. Both sides compute
+$C_\beta = \prod_k c_k^{\beta_k}$ and $C_0$. There are no $\gamma$
+vectors: the two field rows they served are gone.
+
+\subsubsection*{Step 5: the linear argument, five rows}
+The witness shrinks to $w = (s, b, \rho_\delta, \rho_b, R, \rho^*)$, of
+length $m + n + 4$, and the linear map $\varphi'$ into $\G^5$ has the rows
+\[
+  \com_{\mathbf{g}'}(s; \rho_\delta),\quad \com(b; \rho_b),\quad g^{R},\quad
+  g^{\langle \beta, b \rangle} h^{R},\quad h_1^{\rho^*},
+\]
+with target $(C_\delta, C_b, C_{\beta,1}, C_{\beta,2}, C_0)$. The first row
+recovers $s$, the second $b$, the third and fourth are the link of the
+batched protocol, and the fifth is Step~3. The protocol is the one of
+Section~\ref{sec:linsigma}: announce $\varphi'(a)$, receive $c$, answer $u
+= a + c\,w$. The vectors $\delta$, $p$, and $X^{(t)}$ are no longer in
+the witness; they enter only through the zero argument.
+
+\subsubsection*{Step 6: one zero argument for everything quadratic}
+The four Hadamard facts, $b \circ \delta = p$, $X^{(t)} \circ (X^{(t)} -
+\mathbf{1}) = 0$ for each $t$, and $b \circ (b - \mathbf{1}) = 0$, are
+$L + 2$ relations of the kind the zero argument proves, each a sum of
+products that must vanish coordinate by coordinate. One argument with $L
++ 3$ rows proves them all, provided no two relations can cancel each
+other. The weights $z, z^2, \ldots, z^{2+L}$ prevent that:
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+row & left & right \\
+\midrule
+$1$ & $z\, b$ & $\delta$ \\
+$2$ & $z\, p$ & $-\mathbf{1}$ \\
+$3 + t$ & $z^{2+t} X^{(t)}$ & $X^{(t)} - \mathbf{1}$ \\
+$3 + L$ & $z^{2+L}\, b$ & $b - \mathbf{1}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+The claim $\sum_i \text{left}_i \star_y \text{right}_i = 0$ reads
+\[
+  z\,\big(b \star_y \delta - p \star_y \mathbf{1}\big)
+  + \sum_{t < L} z^{2+t}\, X^{(t)} \star_y (X^{(t)} - \mathbf{1})
+  + z^{2+L}\, b \star_y (b - \mathbf{1}) = 0,
+\]
+a polynomial in $z$ whose coefficients are the $L + 2$ relations at $y$
+(rows $1$ and $2$ share the weight $z$ because only their difference
+vanishes). If some relation fails, the polynomial is non-zero and has at
+most $L + 1$ roots, so a random $z$ catches it except with probability
+$(L + 1)/q$; and each relation at $y$ is itself a polynomial in $y$ whose
+coefficients are the coordinates, as in the batched protocol. The
+verifier builds all $2(L + 3)$ commitments of the table from the posted
+ones, $C \mapsto C^{z^i}$ for the weights and $C \mapsto C \cdot
+\com(-\mathbf{1}; 0)$ for the subtractions, so the argument costs the
+voter one announcement and one response of about $2n$ field elements,
+where the three arguments of the batched protocol cost $(2L + 4)n$.
+
+\subsubsection*{Step 7: answer and verify}
+The verifier sends $c$ and $x$, the voter answers, and the verifier
+(\rocq{verify\_ballot3}) checks that there are $n$ ciphertexts and $L$
+bit commitments, the five equations of the linear argument, and the zero
+argument on the rows of Step~6. If all pass, the $c_k$ join the
+encrypted margins.
+
+\subsubsection*{Step 8: why accepted means valid}
+The extractor (\rocq{ballot3\_sound}, Section~\ref{sec:ballot2sd},
+Step~7) combines the checks in a different order from the batched
+protocol, because two facts now come from binding rather than from a
+proof:
+\begin{enumerate}[nosep]
+  \item the linear argument gives $s$, $b$, and the link, so every
+  ciphertext encrypts its committed bit (as in the batched protocol);
+  \item one accepted zero argument gives openings $p$ and $X^{(t)}$ of
+  $C_p$ and the $C_{X^{(t)}}$; every other accepted $(y, z)$ opens the same
+  vectors, by binding, so the weighted claim holds at all of them;
+  \item $L + 2$ values of $z$ separate the rows and $n$ values of $y$ the
+  coordinates: $p = b \circ \delta$, and $b$ and every $X^{(t)}$ are bit
+  vectors;
+  \item $C_\delta$ opens to $Ms$ by the derived key, and $C_0 = h_1^{\rho^*}$
+  opens to the zero vector, so $\delta = Ms$ and $v = \sum_t 2^t X^{(t)}$
+  entry by entry, both by binding;
+  \item the decoding of the batched protocol's Step~7 then gives $b_{ij}
+  = [s_i < s_j]$.
+\end{enumerate}
+
+\subsubsection*{Step 9: removing the interaction}
+Five challenges instead of ten (\rocq{challenges\_of3}): $\beta$, $y$,
+and $z$ from the ciphertexts and the $L + 3$ commitments; $c$ from those
+and the linear announcement; $x$ from those and the zero argument's
+announcement. The honest voter still needs three passes, since the linear
+announcement depends on $\beta$ and the zero argument's on $y$ and $z$
+(\rocq{nizk\_encrypt\_ballot3}).
+
+\subsubsection*{Step 10: what it costs}
+The ballot is $2n + 3L + 17$ group elements, of which $2n$ are the
+ciphertexts, and $3n + m + 7$ field elements. At $m = 17$ that is
+$180$\,KB against $352$\,KB for the batched protocol and $6.2$\,MB for
+the first, with $0.7$\,s to prove and $1.6$\,s to verify against
+$4.2$\,s and $5.7$\,s (Section~\ref{sec:ballot2s}). The ciphertexts are
+now most of the ballot, $148$ of the $180$\,KB. Completeness, special
+soundness, SHVZK, and the end-to-end theorem are machine-checked
+(\rocq{ballot3\_valid}, \rocq{ballot3\_sound}, \rocq{ballot3\_zk},
+\rocq{schulze\_end\_to\_end3}), and the Gentoo elections run through it
+take a second or two per ballot (Section~\ref{sec:ballot2s}).
+
+\section{The first ballot: position-anchored membership proofs}\label{sec:ballot1}
+
+\subsection{Encoding a ranking}
+A ranking with ties is a \emph{position vector} $s \in \{0, \ldots, m\}^m$:
+$s_i$ is the position of candidate $i$, smaller is better, equal positions
+are ties, and $s_i = m$ means ``unranked'' (ranked last). Any such vector
+is a valid ranking, so no transitivity condition is needed. The ballot's
+contribution to the margin $D_{ij}$ is the bit
+\[
+  b_{ij} = [\, s_i < s_j \,] = [\, \delta_{ij} \ge 1 \,], \qquad
+  \delta_{ij} = s_j - s_i \in \{-m, \ldots, m\}.
+\]
+
+\ex{Ballot 1, $A > B = C$, is $s = (0, 1, 1)$. Then $\delta_{AB} =
+\delta_{AC} = 1$, $\delta_{BA} = \delta_{CA} = -1$, $\delta_{BC} =
+\delta_{CB} = 0$; the bits are $b_{AB} = b_{AC} = 1$ and all others $0$. A
+tie contributes nothing to either margin. Ballot 2, $B > C > A$, is $s =
+(2, 0, 1)$ with bits $b_{BC} = b_{BA} = b_{CA} = 1$.}
+
+\subsection{What the voter publishes}
+The voter publishes:
+\begin{enumerate}[nosep]
+  \item[(P)] for every candidate $i$, $\Enc(s_i)$ with a membership proof
+  $s_i \in \{0, \ldots, m\}$ ($m + 1$ branches);
+  \item[(B)] for every ordered pair $(i, j)$, $\Enc(b_{ij})$ with a
+  membership proof $b_{ij} \in \{0, 1\}$ (2 branches) and a proof of
+  consistency with the positions:
+  \begin{equation}\label{eq:cons}
+    (b_{ij} = 1 \wedge \delta_{ij} \in \{1, \ldots, m\})
+    \;\vee\;
+    (b_{ij} = 0 \wedge \delta_{ij} \in \{-m, \ldots, 0\}).
+  \end{equation}
+\end{enumerate}
+The verifier computes $\Enc(\delta_{ij}) = \Enc(s_j) / \Enc(s_i)$ by the
+homomorphism; the voter never supplies it. This is the \emph{anchoring}. If
+$\Enc(\delta_{ij})$ were an input, a voter could post $\delta_{AB} =
+\delta_{BA} = 1$ and prove $b_{AB} = b_{BA} = 1$: a ballot that counts $A >
+B$ and $B > A$ at once. Anchored to one position vector, $\delta_{BA} =
+-\delta_{AB}$ automatically.
+
+\ex{Why a cyclic ballot is impossible. Suppose a voter wants to publish
+$b_{AB} = b_{BC} = b_{CA} = 1$, a cycle that no ranking produces and that
+would add one to each of $D_{AB}$, $D_{BC}$, $D_{CA}$. The three cells
+need $\delta_{AB} \ge 1$, $\delta_{BC} \ge 1$ and $\delta_{CA} \ge 1$,
+i.e.\ $s_A < s_B < s_C < s_A$, which no integers satisfy. The voter cannot
+use different positions for different cells, because each position is
+encrypted once and the verifier computes every $\Enc(\delta_{ij})$ from
+the same two position ciphertexts. With $A > B > C$, $s = (0, 1, 2)$, the
+cell $(C, A)$ has $\delta_{CA} = -2$: the claim $b_{CA} = 1$ would need
+the shifted plaintext $7 \cdot 1 - 2 = 5$ to be in $\{-3, \ldots, 0\}
+\cup \{8, 9, 10\}$, which it is not, and only $b_{CA} = 0$, with $t =
+-2$, can be proved. Theorem~\ref{thm:b1sound} is the general statement:
+every accepted bit is $[s_i < s_j]$ for one vector $s$, and ``$<$'' on
+integers has no cycles.}
+
+\paragraph{The shift trick} Condition~\eqref{eq:cons} is two membership
+statements joined by ``or'', which would be a disjunction of disjunctions.
+It is implemented as \emph{one} membership proof on the ciphertext
+\[
+  \Enc(b_{ij})^{K} \cdot \Enc(\delta_{ij}), \qquad K = 2m + 1,
+\]
+whose plaintext is $t = K b_{ij} + \delta_{ij}$, with message set $\{-m,
+\ldots, 0\} \cup \{K + 1, \ldots, K + m\}$. Since $b \in \{0, 1\}$ (by its
+own proof) and $\delta \in [-m, m]$ (by the position proofs), $t \in \{-m,
+\ldots, 0\}$ exactly when $b = 0$ and $\delta \le 0$, and $t \in \{K+1,
+\ldots, K+m\}$ exactly when $b = 1$ and $\delta \ge 1$: the two ranges are
+separated by the gap $\{1, \ldots, K\}$, which no honest or dishonest $(b,
+\delta)$ can straddle in the wrong direction.
+
+\ex{$m = 3$, $K = 7$, message set $\{-3, -2, -1, 0\} \cup \{8, 9, 10\}$.
+Honest cells: $(b, \delta) = (1, 1)$ gives $t = 8$; $(0, -1)$ gives $t =
+-1$; $(0, 0)$ gives $t = 0$. Dishonest cells: $(1, 0)$ gives $7$, $(1, -1)$
+gives $6$, $(0, 1)$ gives $1$, $(0, 2)$ gives $2$: none is in the set, and
+the membership proof cannot be made. Table~\ref{tab:ballot1} lists ballot
+1.}
+
+\begin{table}[t]
+  \centering
+  \caption{Ballot 1 in the first protocol: $s = (0,1,1)$, $m = 3$, $K =
+  7$. Every row is one ciphertext $\Enc(b_{ij})$ with its 0/1 proof and
+  one membership proof on $\Enc(b_{ij})^7 \Enc(\delta_{ij})$. The last two
+  rows are cheating attempts.}
+  \label{tab:ballot1}
+  \begin{tabular}{@{}lcccl@{}}
+    \toprule
+    pair & $b_{ij}$ & $\delta_{ij}$ & $t = 7 b_{ij} + \delta_{ij}$ & membership \\
+    \midrule
+    $(A,B)$ & 1 & $1$ & $8$ & $\in \{8,9,10\}$ \\
+    $(A,C)$ & 1 & $1$ & $8$ & $\in \{8,9,10\}$ \\
+    $(B,A)$ & 0 & $-1$ & $-1$ & $\in \{-3,\ldots,0\}$ \\
+    $(C,A)$ & 0 & $-1$ & $-1$ & $\in \{-3,\ldots,0\}$ \\
+    $(B,C)$ & 0 & $0$ & $0$ & $\in \{-3,\ldots,0\}$ \\
+    $(C,B)$ & 0 & $0$ & $0$ & $\in \{-3,\ldots,0\}$ \\
+    \midrule
+    $(B,A)$ & 1 & $-1$ & $6$ & rejected \\
+    $(B,C)$ & 1 & $0$ & $7$ & rejected \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+A ballot thus has $m + m^2$ ciphertexts (the implementation keeps the $m$
+diagonal cells, which encrypt $0$), $m$ membership proofs with $m+1$
+branches and $m^2$ cells with a 2-branch and a $(2m+1)$-branch proof: about
+$2m^3$ Chaum--Pedersen transcripts. All proofs of a ballot share one
+Fiat--Shamir challenge, the hash of the voter's credential and of all
+ciphertexts and announcements (\rocq{nizk\_encrypt\_ballot},
+\rocq{nizk\_verify\_ballot}).
+
+\subsection{Soundness}
+\begin{theorem}[\rocq{ballot\_sound}]\label{thm:b1sound}
+Let $h = g^x$, let $g$ have order $q$ (\rocq{exp\_injective}), and let the
+field have characteristic above $4m + 2$ (\rocq{natF\_injective}). From two
+accepting transcripts of a ballot with the same announcements and different
+challenges, there is a position vector $s \in \{0, \ldots, m\}^m$ such that
+every pair ciphertext decrypts to $g^{[s_i < s_j]}$.
+\end{theorem}
+\begin{proof}
+Every proof of the ballot is an OR-composition of Chaum--Pedersen proofs
+with the shared challenge, so the two transcripts give two transcripts of
+every proof with distinct challenges, and the extractor of
+Section~\ref{sec:sigma} applies to each.
+
+(1) From the position proofs: for every $i$ there are $s_i \in \{0, \ldots,
+m\}$ and $r_i$ with $\Enc(s_i; r_i)$ the posted ciphertext. Define $s$ from
+these; it is a position vector.
+
+(2) From the 0/1 proofs: $\Enc(b_{ij})$ encrypts some $b_{ij} \in \{0, 1\}$.
+
+(3) From the consistency proofs: the ciphertext $\Enc(b_{ij})^K \cdot
+\Enc(s_j) / \Enc(s_i)$, which by the homomorphism encrypts $t = K b_{ij} +
+s_j - s_i$ computed in $\Z_q$, encrypts some $t' \in \{-m, \ldots, 0\} \cup
+\{K+1, \ldots, K+m\}$. Two plaintexts of one ciphertext under one key are
+equal as group elements, $g^{t} = g^{t'}$, hence $t = t'$ in $\Z_q$ because
+$g$ has order $q$. Both $t$ and $t'$ are images of integers in $[-m, 3m+1]$,
+an interval of length $4m + 1$, so $t = t'$ as integers by the
+characteristic bound.
+
+(4) Case $b_{ij} = 0$: $t = \delta_{ij} \in [-m, m]$, and $t \in \{K+1,
+\ldots\}$ is impossible since $K + 1 = 2m + 2 > m$; so $\delta_{ij} \le 0$,
+i.e.\ $s_i \ge s_j$ and $[s_i < s_j] = 0 = b_{ij}$. Case $b_{ij} = 1$: $t =
+K + \delta_{ij} \ge K - m = m + 1 > 0$, so $t \in \{K+1, \ldots, K+m\}$,
+hence $\delta_{ij} \ge 1$ and $[s_i < s_j] = 1 = b_{ij}$. In both cases
+$\Dec(\Enc(b_{ij})) = g^{b_{ij}} = g^{[s_i < s_j]}$.
+\end{proof}
+The two side conditions are facts about the Schnorr group, proved once for
+every instance in \rocq{Utility/SchnorrOrder.v}; at the instance the
+theorems have no hypothesis beyond the transcripts
+(\rocq{ballot\_sound\_ins}).
+
+\subsection{Zero-knowledge}
+\begin{theorem}[\rocq{ballot\_zk}]
+For positions in $[0, m]$, the distribution of the ballot's proofs over the
+voter's randomness is a permutation of the distribution output by a
+simulator that has the ciphertexts and the challenge only.
+\end{theorem}
+\begin{proof}
+Each proof is simulated by the OR-simulator (all branches simulated), and
+the ballot's proofs are independent given the ciphertexts; the development
+lifts the per-proof permutations through the product of the $m + 2m^2$
+distributions (\rocq{dist\_pair\_perm}, \rocq{dist\_vec\_perm}). The
+simulator derives $\Enc(\delta_{ij})$ from the position ciphertexts as the
+verifier does, so it needs nothing the verifier does not have.
+\end{proof}
+The ciphertexts themselves are not simulated: what they reveal is governed
+by IND-CPA, an on-paper reduction.
+
+\subsection{Cost}
+About $2m^3$ Chaum--Pedersen transcripts, each four group elements and two
+field elements in the ballot and a few exponentiations for prover and
+verifier. At $m = 17$ (the largest Gentoo election): $6.2$\,MB, $130$\,s to
+prove and $68$\,s to verify at the $2048$-bit parameters. This is the cost
+the batched ballot removes.
+
+\section{Aggregation}\label{sec:agg}
+The encrypted margin matrix is the product of the accepted ballots' pair
+ciphertexts, $\Enc(D_{ij}) = \prod_{\text{ballots}} \Enc(b_{ij})$, which by
+the homomorphism encrypts the number of accepted voters with $b_{ij} = 1$,
+i.e.\ $D_{ij}$. Anyone computes it from the board with no key
+(\rocq{aggregate\_margins}, \rocq{cdec\_aggregate}: ``decrypting the
+aggregate gives $g^{D_{ij}}$ when every ballot's bit decrypts to
+$g^{b_{ij}}$''). Rejected ballots are posted as rejected and left out.
+
+\ex{For the pair $(A, B)$: ballots $1, 4, 5$ have $b_{AB} = 1$ and ballots
+$2, 3$ have $0$; the product of the five ciphertexts encrypts $3 = D_{AB}$.
+In the toy group, if the five ciphertexts have randomness $r_1, \ldots,
+r_5$, the aggregate is $\Enc(3; r_1 + \cdots + r_5)$, and the trustees'
+decryption gives $g^3 = 8$.}
+
+\section{The batched ballot: four vector arguments}\label{sec:ballot2}
+
+\subsection{The idea}
+The first ballot pays $2m^3$ transcripts because a $\Sigma$-protocol speaks
+about one ciphertext at a time, and ``$\delta_{ij}$ is in a range'' is a
+disjunction over the range. The batched ballot commits to the whole vectors
+$s, \delta, b$ and proves the same validity as three statements about
+vectors: a linear relation, an entry-wise product, and ``these entries are
+bits''. Each is one argument of Section~\ref{sec:tools} over the whole
+vector, with cost linear in the vector length. Positions are
+\emph{committed}, not encrypted; only the $m^2$ bits are encrypted, since
+only they are aggregated.
+
+\subsection{The statement}
+Write $n = m^2$ and index pairs $(i, j)$ by $k = i m + j \in \{0, \ldots, n
+- 1\}$. Let $L = \lceil \log_2(m + 1) \rceil$. For a position vector $s$
+define
+\[
+  \delta = M s \quad (\delta_{ij} = s_j - s_i), \qquad
+  p = b \circ \delta \quad (p_k = b_k \delta_k), \qquad
+  v = -\delta + 2p - b .
+\]
+Here $M$ is the $n \times m$ \emph{difference matrix}. Each difference
+is a fixed linear combination of the positions: $\delta_{ij} = (+1)\cdot s_j
++ (-1)\cdot s_i$, with coefficient $0$ on every other position. A row of
+$M$ holds the coefficients of one such combination, so each entry of $M$ is
+a single coefficient, $-1$, $0$, or $+1$, and the whole matrix stacks all
+$n$ rows so that $\delta = M s$ computes every difference at once. For
+three candidates, row $AB$ is $(-1, +1, 0)$, and applied to $s = (s_A,
+s_B, s_C)$ it gives
+\[
+  \delta_{AB} = (-1)\cdot s_A + (+1)\cdot s_B + 0 \cdot s_C = s_B - s_A .
+\]
+In general row $(i, j)$ has $+1$ in column $j$, $-1$ in column $i$, and
+$0$ elsewhere, and the diagonal rows $(i, i)$ are zero. The matrix $M$ is public and does not depend on any ballot: each row
+only says which two positions to subtract, not what they are. Anyone who
+knows the number of candidates can compute it, and it is the same for
+every voter. The verifier builds it itself: the candidate list, and so
+$m$, is part of the published election setup, and the rule for $M$ is part
+of the protocol that every verifier implements, like its verification
+equations. $M$ never appears on the board, and the voter cannot choose it.
+What is secret is the voter's $s$, and through it $\delta = Ms$. The
+development never builds $M$ as a matrix; the linear map $\varphi$
+computes each row as the subtraction $s_j - s_i$.
+
+Computing $M$ for any candidate list takes three steps. First, number the
+candidates $0, 1, \ldots, m - 1$ in the order of the published list; this
+order also fixes the order of the voter's ciphertexts. Second, for every
+ordered pair $(i, j)$, write the row vector of length $m$ that has $-1$ in
+entry $i$, $+1$ in entry $j$, and $0$ everywhere else; with $e_i$ the unit
+row vector that has $1$ in entry $i$, this row is $e_j - e_i$. When $i =
+j$ the $-1$ and the $+1$ fall in the same entry and cancel, so the
+diagonal rows are zero without a special case. Third, stack the $m^2$ rows
+in the order of the cells, with row $(i, j)$ in position $k = i m + j$. The
+result is $M$, and row $k$ applied to $s$ gives $\delta_{ij} = s_j - s_i$.
+For the list $A, B, C$, numbered $0, 1, 2$, the pair $(B, C) = (1, 2)$ is
+row $k = 1 \cdot 3 + 2 = 5$, the vector $e_2 - e_1 = (0, -1, +1)$. Applied
+to $m = 3$, the three steps give the matrix below, written as $M^{\top}$
+with rows for $A, B, C$ and columns for the cells $AA, AB, AC, BA, BB, BC,
+CA, CB, CC$:
+\[
+  M^{\top} =
+  \begin{pmatrix}
+    0 & -1 & -1 & 1 & 0 & 0 & 1 & 0 & 0 \\
+    0 & 1 & 0 & -1 & 0 & -1 & 0 & 1 & 0 \\
+    0 & 0 & 1 & 0 & 0 & 1 & -1 & -1 & 0
+  \end{pmatrix}.
+\]
+Two voters in the same election share this $M$ and differ only in $s$,
+hence in $\delta$. The ranking $A > B > C$ has $s = (0, 1, 2)$ and $C > B
+> A$ has $s = (2, 1, 0)$:
+\begin{align*}
+  A > B > C:&\quad \delta = M\,(0, 1, 2) = (0, 1, 2,\; -1, 0, 1,\; -2, -1, 0),\\
+  C > B > A:&\quad \delta = M\,(2, 1, 0) = (0, -1, -2,\; 1, 0, -1,\; 2, 1, 0).
+\end{align*}
+The reversed ranking negates every difference, as it should; the matrix is
+the same in both cases.
+If $b_k = 0$ then $v_k = -\delta_k$; if $b_k = 1$ then $v_k = \delta_k - 1$.
+So $b_k = [\delta_k \ge 1]$ is equivalent to ``$b_k$ is a bit and $v_k$ is a
+non-negative integer'', and since $|\delta_k| \le m$, a non-negative $v_k$
+is below $2^L$. The validity statement is therefore
+\begin{equation}\label{eq:validity}
+\begin{gathered}
+  b \in \{0,1\}^n,\qquad
+  \delta = M s,\qquad
+  p = b \circ \delta,\\
+  v = \sum_{t < L} 2^t X^{(t)} \text{ for bit vectors } X^{(0)}, \ldots, X^{(L-1)} \in \{0,1\}^n .
+\end{gathered}
+\end{equation}
+No upper bound on $s$ is needed: the differences are small, so the
+positions relative to one candidate are small integers.
+
+The vector $p$ is not needed to define $v$: mathematically $v = -\delta +
+2(b \circ \delta) - b$. It is needed by the proofs. The linear argument
+(a) below proves only relations that are linear in the committed vectors,
+with public coefficients, and $b \circ \delta$ multiplies two secret
+vectors. So the ballot commits to $p$ as a vector of its own, which makes
+the definition of $v$ linear in $(\delta, p, b)$, and proves the one
+quadratic fact $p = b \circ \delta$ with a zero argument. Bit-ness,
+$b_k(b_k - 1) = 0$ and $X_k(X_k - 1) = 0$, is quadratic for the same
+reason and also goes to zero arguments; everything else ($\delta = Ms$, the
+binary expansion of $v$, and the link to the ciphertexts) is linear and goes
+to the single linear argument. This is the usual treatment of
+multiplication in proofs for arithmetic circuits: every product gets a
+committed output of its own.
+
+\ex{Ballot 1, $s = (0, 1, 1)$, $m = 3$, $n = 9$, $L = 2$, cells in the
+order $AA$, $AB$, $AC$, $BA$, $BB$, $BC$, $CA$, $CB$, $CC$:
+\begin{align*}
+  \delta &= (0, 1, 1,\; -1, 0, 0,\; -1, 0, 0), \\
+  b &= (0, 1, 1,\; 0, 0, 0,\; 0, 0, 0), \\
+  p &= (0, 1, 1,\; 0, 0, 0,\; 0, 0, 0), \\
+  v &= (0, 0, 0,\; 1, 0, 0,\; 1, 0, 0), \\
+  X^{(0)} &= v, \qquad X^{(1)} = 0 .
+\end{align*}
+Check cell $AB$: $v = -1 + 2 \cdot 1 - 1 = 0$; cell $BA$: $v = 1 + 0 - 0 =
+1$. Now the cheating attempts of Table~\ref{tab:ballot1}: $b_{BA} = 1$ with
+$\delta_{BA} = -1$ forces $p_{BA} = -1$ and $v_{BA} = 1 - 2 - 1 = -2$;
+$b_{BC} = 1$ with $\delta_{BC} = 0$ forces $v_{BC} = -1$. In $\Z_{23}$
+these are $21$ and $22$, neither of which is $X^{(0)} + 2 X^{(1)}$ for bits
+$X$. So no witness satisfies~\eqref{eq:validity}, and the cheating voter
+fails at the bit argument instead of at a membership proof.}
+
+\subsection{Where the statement comes from}
+The vectors $\delta$, $p$, and $v$ are what is left after the validity
+condition $b_{ij} = [s_i < s_j]$ is rewritten in the only three shapes the
+tools of Section~\ref{sec:tools} can check about committed vectors: linear
+relations (the linear argument), entry-wise products, and ``every entry is
+$0$ or $1$'' (both by zero arguments). Each step of the rewriting is forced
+by one limitation of these tools.
+
+The first step anchors the differences. As in the first ballot, every
+pair must use differences of one position vector, or a voter could choose
+$\delta_{AB} = \delta_{BA} = 1$. The differences are a linear function of
+$s$, so the anchoring is the linear relation $\delta = Ms$.
+
+The second step turns the comparison into a single non-negativity claim.
+The condition $b = [\delta \ge 1]$ is a case split: if $b = 1$ then
+$\delta - 1 \ge 0$, and if $b = 0$ then $-\delta \ge 0$. Both cases say
+that some quantity is non-negative, and for a bit $b$ the standard way to
+write ``if $b$ then $x$ else $y$'' is $b x + (1 - b) y$. With $x = \delta -
+1$ and $y = -\delta$,
+\[
+  v = b(\delta - 1) + (1 - b)(-\delta) = -\delta + 2 b \delta - b ,
+\]
+so the condition becomes: $b$ is a bit and $v$ is non-negative.
+
+The third step expresses non-negativity in a field, where elements wrap
+around modulo $q$ and ``$\ge 0$'' has no meaning. The voter instead shows
+that $v$ is a small integer by writing it in binary, $v = \sum_t 2^t
+X^{(t)}$ with bit vectors $X^{(t)}$. Honest values are bounded, $v = -\delta
+\le m$ when $b = 0$ and $v = \delta - 1 \le m - 1$ when $b = 1$, so $L =
+\lceil \log_2(m + 1) \rceil$ bits suffice. The expansion is linear in $X$,
+and bit-ness is the third shape.
+
+The fourth step names the product. The term $b\delta$ multiplies two secret
+vectors, which the linear argument cannot express, so the voter commits to
+$p = b \circ \delta$ separately, as explained above. This makes $v =
+-\delta + 2p - b$ linear, and the product argument proves $p = b \circ
+\delta$.
+
+Why this is enough: suppose every check passes, so that, after rewinding,
+the committed vectors satisfy all the relations and the ciphertexts
+encrypt the committed $b$. Take any pair $k = (i, j)$. If $b_k = 0$ then
+$v_k = -\delta_k$ is in $[0, 2^L)$, so $\delta_k \le 0$, i.e.\ $s_i \ge
+s_j$, and the bit is the correct $[s_i < s_j] = 0$. If $b_k = 1$ then $v_k
+= \delta_k - 1$ is in $[0, 2^L)$, so $\delta_k \ge 1$, i.e.\ $s_i < s_j$,
+and the bit is the correct $1$. Since $b$ is a bit there is no third case,
+so every encrypted bit is the comparison bit of one position vector, which
+is exactly a valid ballot.
+
+Every check is needed. Table~\ref{tab:necessary} shows, for each one, an
+invalid ballot that passes without it. The examples are in $\Z_{23}$;
+the second and third rows start from the ballot $A > B > C$, where
+$\delta_{BA} = -1$.
+
+\begin{table}[ht]
+  \centering
+  \caption{Removing any one check admits an invalid ballot.}
+  \label{tab:necessary}
+  \begin{tabularx}{\textwidth}{@{}l>{\raggedright\arraybackslash}X@{}}
+    \toprule
+    removed check & an invalid ballot that then passes \\
+    \midrule
+    $\delta = Ms$ & commit to $\delta_{AB} = \delta_{BA} = 1$ and set
+    $b_{AB} = b_{BA} = 1$: the ballot counts $A > B$ and $B > A$ \\
+    $p = b \circ \delta$ & claim $b_{BA} = 1$ and commit to $p_{BA} = 0$
+    instead of $-1$: then $v_{BA} = 1 + 0 - 1 = 0$, which looks
+    non-negative \\
+    $X$ is a bit vector & claim $b_{BA} = 1$ with the honest $p_{BA} =
+    -1$: then $v_{BA} = 1 - 2 - 1 = -2 \equiv 21$, and $X^{(0)}_{BA} = 21$
+    expands it \\
+    $b$ is a bit vector & on the tied pair $B, C$ of the ballot $A > B = C$,
+    where $\delta_{BC} = 0$, take $b_{BC} = -1$: then $p_{BC} = 0$ and
+    $v_{BC} = 1$, which passes the range check, and the ballot subtracts
+    one from the margin $D_{BC}$ \\
+    the ciphertext link & commit to the honest $b$ and encrypt different
+    bits \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+Two subtleties are handled by the formal proof. First, no range check on
+$s$ is needed. From $v$ being small, every difference $s_j - s_i$ is a
+small integer, so the positions relative to the first candidate,
+$\pos_i = 2^L + (s_i - s_0)$, are natural numbers, and any vector of
+natural numbers is a valid ranking with ties. Second, the field must be
+large enough. ``$\delta_k \ge 1$'' is a statement about integers, while
+the checks hold modulo $q$, and in a small field a negative value could
+wrap around and look small. Theorem~\ref{thm:b2sound} therefore assumes a
+characteristic above $3 \cdot 2^L + 2$, so that every value involved stays
+below $q$; the bound came out of the formal proof. The case analysis above
+is the readable version of \rocq{ballot2\_sound}, which checks every step
+in Rocq, including both subtleties.
+
+\subsection{The ballot}
+Public: the election key $(g, h)$; a commitment key $h_1, \mathbf{g}_1 \in
+\G^{n}$ and a longer one $h_1, \mathbf{g}_2 \in \G^{Ln}$. The voter posts:
+\begin{itemize}[nosep]
+  \item the ciphertexts $c_k = \Enc(b_k; r_k)$, $k < n$;
+  \item commitments $C_s = \com(s; \rho_s)$, $C_\delta$, $C_b$, $C_p$ over
+  $\mathbf{g}_1$ (with $s$ padded to length $n$), and $C_X = \com(X;
+  \rho_X)$ over $\mathbf{g}_2$, where $X$ is the concatenation of
+  $X^{(0)}, \ldots, X^{(L-1)}$;
+  \item three arguments, (a), (b), (c) below.
+\end{itemize}
+
+\paragraph{(a) The linear argument} The verifier draws coefficient vectors
+$\beta, \gamma_1, \gamma_2 \in \Z_q^n$ \emph{after} the ciphertexts and
+commitments are posted. Everyone computes the ciphertext combination
+\[
+  C_\beta = \prod_{k} c_k^{\beta_k} = \Enc\big(\langle \beta, b^{\mathrm{true}}\rangle;\; \langle \beta, r \rangle\big),
+\]
+where $b^{\mathrm{true}}$ is the vector of plaintexts. The voter proves
+knowledge of
+\[
+  w = (s, \delta, b, p, X, \rho_s, \rho_\delta, \rho_b, \rho_p, \rho_X, R)
+  \in \Z_q^{W}, \qquad W = m + 3n + Ln + 6,
+\]
+with $\varphi_{\beta, \gamma}(w) = T$, where $\varphi$ is the linear map
+into $\G^7 \times \Z_q^2$ with rows
+\begin{align*}
+  &\com(s; \rho_s),\; \com(\delta; \rho_\delta),\; \com(b; \rho_b),\; \com(p; \rho_p),\; \com(X; \rho_X),\;
+  g^{R},\; g^{\langle \beta, b \rangle} h^{R}, \\
+  &\langle \gamma_1,\; \delta - M s \rangle,\qquad
+  \big\langle \gamma_2,\; \textstyle\sum_t 2^t X^{(t)} + \delta - 2p + b \big\rangle,
+\end{align*}
+and $T = (C_s, C_\delta, C_b, C_p, C_X, C_{\beta,1}, C_{\beta,2}, 0, 0)$.
+Every row is linear in $w$ (the commitments are exponentials of linear
+forms, the inner products are linear forms), so Section~\ref{sec:linsigma}
+applies. The rows say: the five commitments open to $(s, \delta, b, p, X)$;
+$C_\beta$ encrypts $\langle \beta, b \rangle$ with randomness $R$ for the
+\emph{committed} $b$; and the two field identities hold in the direction
+$\gamma_1$, $\gamma_2$.
+
+\paragraph{(b) The product argument} A zero argument with rows $(b, p)$
+against $(\delta, -\mathbf{1})$ at challenge $y_1$: coordinate relations
+$b_k \delta_k - p_k = 0$.
+
+\paragraph{(c) The two bit arguments} A zero argument with the single row
+$X$ against $X - \mathbf{1}$ at challenge $y_2$, and one with $b$ against
+$b - \mathbf{1}$ at $y_3$; the verifier derives the commitments to $X -
+\mathbf{1}$ and $b - \mathbf{1}$ as $C_X \cdot \com(-\mathbf{1}; 0)$ and
+$C_b \cdot \com(-\mathbf{1}; 0)$.
+
+\paragraph{Verification} (\rocq{verify\_ballot2}) Check that there are $n$
+ciphertexts; check the linear argument, $\varphi_{\beta,\gamma}(z) = A + c
+\cdot T$, which unfolds to seven group equations and two field equations;
+check the three zero arguments. All challenges are drawn by the verifier
+in the interactive version and by hashing in the non-interactive one.
+
+\paragraph{Fiat--Shamir} (\rocq{challenges\_of}, \rocq{nizk\_encrypt\_ballot2})
+The challenges are derived in this order, each by a tagged query to the
+oracle: $\beta, \gamma_1, \gamma_2$ (one query per coordinate) and $y_1,
+y_2, y_3$ from the ciphertexts and the commitments; $c$ from those and the
+announcement $A$ of the linear argument; $x_i$ from those and the
+announcement of the $i$-th zero argument. The order matters: a voter who
+could choose $\beta$ could answer the link with a committed $b$ that is not
+the plaintext vector. The honest voter computes the ballot in three
+passes: the first fixes the ciphertexts and commitments and hence $\beta,
+\gamma, y$ (and the zero arguments' announcements, which do not depend on
+$x$); the second fixes $A$, which depends on $\beta, \gamma$, and hence
+$c$; the third answers. Ten oracle queries in all; the honest ballot is
+accepted (\rocq{nizk\_ballot2\_valid}).
+
+\subsection{Why the random linear combination is sound}
+The link is the small-exponent batch test of Bellare, Garay, and
+Rabin~\cite{bgr98}, which shuffle arguments use to tie ciphertexts to
+committed vectors~\cite{tereliuswikstrom,bayergroth}.
+Suppose the committed $b$ differs from the plaintext vector
+$b^{\mathrm{true}}$ in coordinate $k$. The link says $C_\beta$ encrypts
+$\langle \beta, b \rangle$; but $C_\beta$ encrypts $\langle \beta,
+b^{\mathrm{true}} \rangle$. The two agree iff $\beta_k (b_k -
+b^{\mathrm{true}}_k) = \sum_{j \ne k} \beta_j (b^{\mathrm{true}}_j - b_j)$,
+which for fixed other coordinates holds for exactly one value of
+$\beta_k$. So a cheating voter answers the link for a $1/q$ fraction of
+the coefficient vectors. The mechanised statement avoids probabilities by
+asking for the link at a base $\beta$ and at a $\beta'$ differing only in
+coordinate $k$: dividing the two links,
+\[
+  c_k^{\beta_k - \beta'_k} = \Enc\big(b_k (\beta_k - \beta'_k);\; R - R'\big),
+\]
+and since $\G$ is a vector space over $\Z_q$, raising both sides to the
+power $(\beta_k - \beta'_k)^{-1}$ gives $c_k = \Enc(b_k; (R - R')/(\beta_k
+- \beta'_k))$, so $\Dec(c_k) = g^{b_k}$ (\rocq{beta\_bits},
+\rocq{root\_unique}). Note that this needs no hypothesis on the order of
+$g$, unlike step (3) of Theorem~\ref{thm:b1sound}: nothing is compared in
+the exponent. The same two-vector trick on $\gamma_1$ and $\gamma_2$ turns
+the two field identities, which hold only in the direction $\gamma$, into
+entry-wise identities (\rocq{gamma\_rows}): if $\langle \gamma, e \rangle
+= 0$ and $\langle \gamma', e \rangle = 0$ with $\gamma, \gamma'$ differing
+only at $k$, then $(\gamma_k - \gamma'_k) e_k = 0$, so $e_k = 0$.
+
+\ex{Toy link. Suppose $n = 2$, the plaintexts are $b^{\mathrm{true}} = (1,
+0)$ and a cheating voter commits to $b = (1, 1)$. For $\beta = (3, 5)$,
+$C_\beta$ encrypts $3$, but the voter must prove it encrypts $\langle
+\beta, b \rangle = 8$: impossible unless $3 = 8$ in $\Z_{23}$. The only
+$\beta_2$ for which the voter could answer with $\beta_1 = 3$ is $\beta_2 =
+0$, one value in $23$.}
+
+\subsection{Soundness}
+\begin{theorem}[\rocq{ballot2\_sound}]\label{thm:b2sound}
+Let $h = g^x$, $L \ge 1$, and let the field have characteristic above $3
+\cdot 2^L + 2$. Suppose a batched ballot is accepted
+\begin{itemize}[nosep]
+  \item by the linear argument, on a base tuple $(\beta, \gamma_1,
+  \gamma_2)$ with two challenges $c \ne c'$ on the same announcement, and
+  for every coordinate $k$ on a tuple differing from the base only in
+  $\beta_k$ (likewise only in $\gamma_{1,k}$, likewise only in
+  $\gamma_{2,k}$), each with two challenges;
+  \item by the product argument on $n$ distinct non-zero values of $y_1$,
+  with $2 \cdot 2 + 1 = 5$ challenges each on one announcement;
+  \item by the two bit arguments on $Ln$ (resp.\ $n$) distinct non-zero
+  values of $y$, with $3$ challenges each.
+\end{itemize}
+Then either the binding of $(h_1, \mathbf{g}_1)$ or of $(h_1,
+\mathbf{g}_2)$ is broken, or there is $\pos \in \{0, \ldots, 2^{L+1}\}^m$
+such that every $c_{ij}$ decrypts to $g^{[\pos_i < \pos_j]}$.
+\end{theorem}
+\begin{proof}
+\emph{Step 1, the base witness.} The two challenges at the base tuple give,
+by Lemma of Section~\ref{sec:linsigma}, a witness $w$ with
+$\varphi_{\beta,\gamma}(w) = T$ (\rocq{lin\_open}). Reading the rows
+(\rocq{phi\_target\_open}): $C_s = \com(s; \rho_s)$ and likewise for
+$\delta, b, p, X$; $C_\beta = \Enc(\langle \beta, b \rangle; R)$; $\langle
+\gamma_1, \delta - Ms \rangle = 0$; $\langle \gamma_2, \sum_t 2^t X^{(t)} +
+\delta - 2p + b \rangle = 0$.
+
+\emph{Step 2, the other witnesses open the same vectors.} Each tuple that
+varies one coordinate gives, in the same way, a witness $w'$ whose rows
+open the same five commitments. If any of the five openings differs from
+$w$'s, we have two openings of a Pedersen commitment, a binding break; we
+stop with that conclusion (\rocq{open\_agree}). Otherwise every witness
+has the same $(s, \delta, b, p, X)$, and we have the link and the two
+identities at every tuple.
+
+\emph{Step 3, the committed $b$ is the plaintext vector.} For every $k$,
+the links at $\beta$ and at the tuple varying $\beta_k$ give $\Dec(c_k) =
+g^{b_k}$ by the division-and-root argument above (\rocq{beta\_bits}).
+
+\emph{Step 4, the linear relations hold entry-wise.} For every $k$, the
+identities at $\gamma_1$ and at the tuple varying $\gamma_{1,k}$ give
+$\delta_k = s_j - s_i$ for $k = im + j$; likewise $\gamma_2$ gives $v_k :=
+\sum_t 2^t X^{(t)}_k = -\delta_k + 2 p_k - b_k$ (\rocq{gamma\_rows}).
+
+\emph{Step 5, the zero arguments.} The $5$ transcripts of the product
+argument at each $y_1$ extract openings of $C_b, C_p, C_\delta$ and of
+$\com(-\mathbf{1}; 0)$ satisfying $b' \star_{y_1} \delta' + p' \star_{y_1}
+u' = 0$; the opening $u'$ of $\com(-\mathbf{1}; 0)$ is $-\mathbf{1}$ and the
+others are $b, \delta, p$ unless binding is broken. So $\sum_k y_1^{k}
+(b_k \delta_k - p_k) = 0$ at $n$ distinct non-zero $y_1$, hence $p_k = b_k
+\delta_k$ for all $k$ (\rocq{zero\_prod\_open}; the Vandermonde argument
+is \rocq{PolyRoots}). The bit arguments likewise give $X_j (X_j - 1) = 0$
+for all $j < Ln$ and $b_k (b_k - 1) = 0$ for all $k$
+(\rocq{zero\_bits\_open}).
+
+\emph{Step 6, decoding the positions} (\rocq{decode\_positions}). Now
+every $X_j$ and $b_k$ is $0$ or $1$ in the field, so $v_k = \sum_t 2^t
+X^{(t)}_k$ is the image of a natural number $\nu_k < 2^L$. From $p_k = b_k
+\delta_k$: if $b_k = 0$ then $\delta_k = -v_k$, and if $b_k = 1$ then
+$\delta_k = v_k + 1$. Define, with candidate $0$ as reference, $\pos_i = 2^L
++ (\text{the integer } \delta_{0i})$, i.e.\ $\pos_i = 2^L + \nu_{0i} + 1$
+if $b_{0i} = 1$ and $\pos_i = 2^L - \nu_{0i}$ if $b_{0i} = 0$; this is a
+natural number in $[0, 2^{L+1}]$ (\rocq{posn}, \rocq{posn\_le}), and in
+the field $\pos_i = 2^L + s_i - s_0$. Then $\delta_{ij} = s_j - s_i =
+\pos_j - \pos_i$ in the field, and the same case analysis on $b_{ij}$ shows
+$b_{ij} = 1 \Leftrightarrow \pos_j - \pos_i = \nu_{ij} + 1 \ge 1$ and
+$b_{ij} = 0 \Leftrightarrow \pos_j - \pos_i = -\nu_{ij} \le 0$, where the
+integer inequalities follow from the field equalities because every
+quantity involved is the image of an integer of absolute value at most $3
+\cdot 2^L + 2$ and the characteristic exceeds that. So $b_{ij} = [\pos_i <
+\pos_j]$, and by Step 3, $\Dec(c_{ij}) = g^{[\pos_i < \pos_j]}$.
+\end{proof}
+The theorem is in the \emph{perfect-adversary} form: it assumes the prover
+answers every challenge the extractor needs. The usual forking-lemma
+argument turns this into a bound on a prover accepted with probability
+$\varepsilon$; it is on paper, as for the library's shuffle theorems.
+
+\subsection{Zero-knowledge}
+\begin{theorem}[\rocq{ballot2\_zk}]
+For positions in $[0, m]$ and $m < 2^L$, and for commitment keys of the
+form $g_{1,j} = h_1^{\gamma_{1,j}}$, $g_{2,j} = h_1^{\gamma_{2,j}}$, the
+distribution of the honest batched ballot over the voter's randomness (the
+$n$ encryption randomnesses, the five commitment randomnesses, the
+announcement randomness $a$ of the linear argument and the randomness of
+the three zero arguments) is a permutation of the output of a simulator
+that has the ciphertexts and the challenges only.
+\end{theorem}
+\begin{proof}
+The simulator draws five exponents $u_s, \ldots, u_X$ uniformly, sets the
+commitments to $h_1^{u}$, computes $T$ from the ciphertexts and these
+commitments, and runs the simulators of the linear argument
+(Section~\ref{sec:linsigma}) and of the three zero arguments on them. The
+proof composes three bijections of the randomness
+(\rocq{real\_proofs\_perm}, \rocq{com\_vals\_perm}):
+\begin{enumerate}[nosep]
+  \item For fixed ciphertexts and fixed commitments, the real proofs are
+  distributed as the simulated ones: this is \rocq{lin\_shvzk} and
+  \rocq{zero\_shvzk} applied to the four arguments one after the other,
+  the statements of the zero arguments being rewritten with the
+  homomorphism ($\com(X - \mathbf{1}; \rho_X) = C_X \cdot \com(-\mathbf{1};
+  0)$).
+  \item The real commitments, over the five commitment randomnesses, are
+  distributed as five uniform elements of $\langle h_1 \rangle$: with
+  $\gamma$ the discrete logarithms of the key, $\com(v; \rho) = h_1^{\rho +
+  \langle \gamma, v \rangle}$, and $\rho \mapsto \rho + \langle \gamma, v
+  \rangle$ is a bijection of $\Z_q$ (\rocq{com\_dlog},
+  \rocq{zk\_of\_bijection}).
+  \item Monad laws rearrange the real distribution, which draws all
+  randomness at once, into the product form the two steps need
+  (\rocq{real\_dist\_proofs}).
+\end{enumerate}
+The hypothesis on the keys is satisfied by every key in $\langle h_1
+\rangle$; the exponents $\gamma$ appear in the proof to exhibit the
+bijection and are not used by the simulator.
+\end{proof}
+
+\subsection{Cost and assumptions}
+Prover: the five commitments and the arguments' announcements, about $(2L
++ 8) n$ exponentiations; verifier about $(2L + 10) n$; the ballot is about
+$(2L + 12) n$ field elements plus the $n$ ciphertexts. At $m = 17$: $352$\,KB,
+$5.5$\,s to prove and $7.8$\,s to verify, against $6.2$\,MB, $130$\,s and
+$68$\,s for the first ballot. Table~\ref{tab:two} compares the two.
+
+\begin{table}[t]
+  \centering
+  \caption{The two ballots for $m$ candidates, $n = m^2$, $L = \lceil
+  \log_2(m+1) \rceil$.}
+  \label{tab:two}
+  \begin{tabular}{@{}lll@{}}
+    \toprule
+     & first ballot & batched ballot \\
+    \midrule
+    ciphertexts & $m + n$ & $n$ \\
+    commitments & --- & $5$ (keys of $n$ and $Ln$ generators) \\
+    proofs & $m$ membership, $n$ 0/1, $n$ membership & $1$ linear, $3$ zero arguments \\
+    size & $O(m^3)$ group elements & $O(n \log m)$ field elements \\
+    prover, verifier & $O(m^3)$ exponentiations & $O(n \log m)$ exponentiations \\
+    oracle queries & $1$ & $10$ \\
+    soundness & exact, $2$ transcripts & statistical, $O(n \log m)$ transcripts \\
+    group hypotheses & $g$ of order $q$; char.\ $> 4m + 2$ & char.\ $> 3 \cdot 2^L + 2$ \\
+    key hypotheses & none & binding of the commitment keys \\
+    zero-knowledge & perfect, no hypothesis & perfect, keys in $\langle h_1 \rangle$ \\
+    end to end & \rocq{schulze\_end\_to\_end} & \rocq{schulze\_end\_to\_end2} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{A simpler batched ballot}\label{sec:ballot2s}
+The batched ballot can be simplified further, and the simplification
+makes it smaller and faster rather than slower. It rests on one
+observation: once every vector is committed under the same key, most
+checks can be done by the verifier through the homomorphism instead of
+being proved. This version is mechanised in
+\rocq{Frontend/SchulzeSimple.v}: the honest ballot is accepted
+(\rocq{ballot3\_valid}) and special soundness holds
+(\rocq{ballot3\_sound}), in the same rewinding form as for the batched
+ballot, and it is zero-knowledge (\rocq{ballot3\_zk}); the full protocol
+is in Section~\ref{sec:ballot2sd}, together with the end-to-end theorem
+(\rocq{schulze\_end\_to\_end3}), and Section~\ref{sec:steps3} walks
+through it step by step. It is extracted and benchmarked like the
+batched ballot, and it was also implemented in the toy group of
+Section~\ref{sec:walk} to check the cheating cases. It has four changes.
+
+The first change commits to $s$ under a derived key, so that $C_s$ and
+the field row for $\gamma_1$ disappear. From the key $g_1, \ldots, g_n$
+anyone can compute a key for positions,
+\[
+  g'_i = \prod_k g_k^{M_{ki}} = \prod_{j} g_{(j,i)}\, g_{(i,j)}^{-1},
+  \qquad i < m,
+\]
+which is public, like $M$. A commitment to $s$ under $\mathbf{g}'$ is
+automatically a commitment to $Ms$ under $\mathbf{g}_1$:
+\[
+  \com_{\mathbf{g}'}(s; \rho) = h_1^{\rho} \prod_i {g'_i}^{s_i} = h_1^{\rho}
+  \prod_k g_k^{(Ms)_k} = \com_{\mathbf{g}_1}(Ms; \rho).
+\]
+So the voter posts the single commitment $C_\delta = \com_{\mathbf{g}'}(s;
+\rho_\delta)$, and $\delta = Ms$ holds by construction. The linear
+argument keeps the one row $C_\delta = \com_{\mathbf{g}'}(s;
+\rho_\delta)$, so that the extractor still recovers the positions. The
+derived key has the known relation $\prod_i g'_i = 1$, because adding a
+constant to every position leaves $\delta$ unchanged; this is harmless,
+since positions are only read relative to $s_0$ anyway. In the toy group,
+$\mathbf{g}' = (32, 8, 9)$ and indeed $32 \cdot 8 \cdot 9 = 1$ modulo
+$47$. (That $g'_A = h_1$ there is a coincidence of the tiny group; with
+keys hashed into a large group it does not happen.)
+
+The second change commits to the bit vectors $X^{(t)}$ separately, under
+the short key $\mathbf{g}_1$, instead of one commitment to $X$ under the
+long key $\mathbf{g}_2$. This costs $L - 1$ extra group elements, and the
+key $\mathbf{g}_2$ disappears. More importantly, every committed vector
+is now under the same key, which the next two changes need.
+
+The third change checks the definition of $v$ through the homomorphism,
+so that the field row for $\gamma_2$ disappears. Since $v = -\delta + 2p -
+b$ and $v = \sum_t 2^t X^{(t)}$, the verifier multiplies commitments it
+already has:
+\[
+  C_0 = C_\delta \cdot C_b \cdot C_p^{-2} \cdot \prod_t C_{X^{(t)}}^{\,2^t}
+      = \com\big(\delta + b - 2p + \textstyle\sum_t 2^t X^{(t)};\; \rho^*\big),
+  \qquad \rho^* = \rho_\delta + \rho_b - 2\rho_p + \textstyle\sum_t 2^t \rho_{X^{(t)}} .
+\]
+For an honest voter the committed vector is exactly zero, so $C_0 =
+h_1^{\rho^*}$, and the voter proves knowledge of $\rho^*$ with a Schnorr
+row. By binding, this gives the relation entry by entry, exactly, rather
+than in a random direction $\gamma_2$. The linear argument no longer
+needs $\delta$, $p$, or $X$ in its witness.
+
+The fourth change merges the three zero arguments into one. Every
+quadratic check now runs over vectors of length $n$ under one key: the
+product $b \circ \delta - p = 0$ (two rows, $b$ against $\delta$ and $p$
+against $-\mathbf{1}$), the $L$ bit checks $X^{(t)} \circ (X^{(t)} -
+\mathbf{1}) = 0$, and the bit check $b \circ (b - \mathbf{1}) = 0$. With
+a new challenge $z$, the voter weights the product relation by $z$, the
+$t$-th bit relation by $z^{2+t}$, and the bit relation on $b$ by
+$z^{2+L}$, and proves that the weighted sum is zero with a single zero
+argument of $L + 3$ rows. The weights are applied to the commitments by
+the homomorphism, $C_a \mapsto C_a^{z^i}$. They keep errors in different
+relations from cancelling, in the same way that the powers of $y$ keep
+coordinates apart: the weighted sum is a polynomial in $z$ whose
+coefficients are the individual relations, so if it vanishes for $L + 3$
+distinct values of $z$, every relation vanishes. The response of a zero
+argument has about $2n$ field elements whatever its number of rows, so
+this is the largest saving.
+
+The simplified voter therefore posts the $n$ ciphertexts, the $L + 3$
+commitments $C_\delta, C_b, C_p, C_{X^{(0)}}, \ldots, C_{X^{(L-1)}}$, one
+linear argument, and one zero argument. The linear argument has the
+witness $(s, b, \rho_\delta, \rho_b, R, \rho^*)$ of $m + n + 4$ field
+elements and five rows:
+\[
+  \com_{\mathbf{g}'}(s; \rho_\delta) = C_\delta,\quad
+  \com(b; \rho_b) = C_b,\quad
+  g^R = C_{\beta,1},\quad
+  g^{\langle \beta, b \rangle} h^R = C_{\beta,2},\quad
+  h_1^{\rho^*} = C_0 .
+\]
+The challenges are $\beta$ and $y, z$ from the ciphertexts and
+commitments, then $c$ and $x$ from the announcements: five, against ten.
+
+Soundness follows the same case analysis as before. The linear argument
+gives $s$, the committed $b$, and the link to the ciphertexts; the zero
+argument gives openings of all the commitments satisfying the product
+and bit relations; binding then gives $\delta = Ms$ from the derived key
+and $v = \sum_t 2^t X^{(t)}$ from $C_0$. Two new lemmas would be needed in
+Rocq: the derived-key argument, which uses only the binding of
+$\mathbf{g}_1$, and the separation of relations by $z$, a polynomial
+argument of the same kind as the existing one for $y$. The existing
+$r$-row zero argument is reused as it stands. The soundness error grows by
+about $(L + 3)/q$ for $z$, which is negligible at $256$-bit $q$.
+
+In the toy implementation the honest ballot for $A > B > C$ is accepted in
+every one of $200$ runs with random challenges, and $C_0 = h_1^{\rho^*}$
+holds as claimed. The cheating ballots of Table~\ref{tab:necessary} are
+rejected: $b_{AA} = -1$ on a tied cell, a fake $p_{BA} = 0$, and an
+encrypted $b_{CA} = 1$ behind an honest commitment are rejected in all
+$200$ runs, the first two by the zero argument and the last by the
+linear argument. The non-bit $X^{(0)}$ is rejected in $191$ of $200$ runs;
+the other $9$ are exactly the runs where the random $y$ is a root of the
+cheat's error polynomial, which happens only because the toy field has
+$23$ elements.
+
+\begin{table}[ht]
+  \centering
+  \caption{The batched ballot and its simplification at $m = 17$, $n =
+  289$, $L = 5$, at the $2048$-bit parameters with $256$-bit $q$. Sizes
+  and times are measured with the extracted programs \rocq{batched.exe}
+  and \rocq{simple.exe} in one run on the same machine; the sizes agree
+  with the counts of Section~\ref{sec:ballot2sd}, Step~10.}
+  \label{tab:simpler}
+  \begin{tabular}{@{}lll@{}}
+    \toprule
+     & batched ballot & simplified \\
+    \midrule
+    commitment keys & two: $n$ and $Ln$ generators & one: $n$ generators, and $\mathbf{g}'$ \\
+    commitments & $5$ & $L + 3 = 8$ \\
+    linear witness & $m + (3 + L)n + 6 = 2{,}335$ & $m + n + 4 = 310$ \\
+    zero arguments & $3$, responses $(2L + 4)n$ in all & $1$, response about $2n$ \\
+    challenges & $10$ & $5$ \\
+    proof part of the ballot & $204$\,KB & $36$\,KB \\
+    whole ballot & $352$\,KB & $180$\,KB \\
+    prove / verify & $4.2$\,s / $5.7$\,s & $0.67$\,s / $1.5$\,s \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+The thirteen Gentoo council elections of Section~\ref{sec:problem} run
+through this ballot (\rocq{gentoo3.exe}, one process per election, voters
+and verifier together) take, per ballot, $0.8$\,s to encrypt and prove at
+$m = 10$ and $2.9$\,s at $m = 17$ for the three-pass client with the
+voter-bound oracle, and $0.5$\,s to $1.6$\,s to verify; every ballot is
+accepted, every replayed ballot rejected, and the certified winners are
+the same. The bulletin boards are $8$\,MB ($2023$, $N = 50$) to $43$\,MB
+($2013$, $N = 96$), against $175$\,MB to $1.5$\,GB with the first ballot,
+whose per-ballot times were $26$ to $132$\,s to prove and $12$ to $57$\,s
+to verify. The whole ballot is dominated by its $289$ ciphertexts, about
+$148$\,KB, so compressing the proofs further, for instance to the
+logarithmic size of Bulletproofs~\cite{bulletproofs}, would add little.
+What the simplification gives up is the one-to-one match between the four
+facts of the validity statement and the four arguments, which makes the
+current version easier to teach. Section~\ref{sec:ballot2sd} gives the
+protocol in full.
+
+\subsection{The simpler ballot in full}\label{sec:ballot2sd}
+This subsection gives the simpler ballot as a complete protocol, with
+every number for $A > B > C$ in the toy group, its soundness and
+zero-knowledge theorems, and the size calculation. The definitions, the
+honest voter, completeness, soundness, and zero-knowledge are in
+\rocq{Frontend/SchulzeSimple.v}; the size count is on paper. The numbers
+come from a toy implementation that
+follows the definitions of \rocq{zero\_prove} and \rocq{zero\_verify}, and
+the keys are those of Section~\ref{sec:walk}: $h_1 = 32$ and $\mathbf{g}_1
+= (34, 8, 27, 14, 36, 3, 17, 42, 12)$, with $m = 3$, $n = 9$, $L = 2$.
+
+\subsubsection*{Step 1: the public keys}
+Anyone computes the position key $\mathbf{g}'$ from $\mathbf{g}_1$ and the
+rule for $M$. Row $(i, j)$ of $M$ has $+1$ in column $j$ and $-1$ in column
+$i$, so $g'_i$ collects $g_{(j, i)}$ for every pair that ends at $i$, and
+$g_{(i, j)}^{-1}$ for every pair that starts at $i$. The diagonal
+generators cancel. For $A, B, C$:
+\begin{align*}
+  g'_A &= g_{BA}\, g_{CA}\, g_{AB}^{-1}\, g_{AC}^{-1} = 14 \cdot 17 \cdot 8^{-1} \cdot 27^{-1} = 32,\\
+  g'_B &= g_{AB}\, g_{CB}\, g_{BA}^{-1}\, g_{BC}^{-1} = 8 \cdot 42 \cdot 14^{-1} \cdot 3^{-1} = 8,\\
+  g'_C &= g_{AC}\, g_{BC}\, g_{CA}^{-1}\, g_{CB}^{-1} = 27 \cdot 3 \cdot 17^{-1} \cdot 42^{-1} = 9 .
+\end{align*}
+No new setup is needed, and no new assumption: binding of $(h_1,
+\mathbf{g}_1)$ is the only one the protocol uses.
+
+\subsubsection*{Step 2: what the voter computes and posts}
+The voter computes $\delta = Ms$, $b$, $p = b \circ \delta$, $v = -\delta
++ 2p - b$, and the bit vectors $X^{(t)}$, exactly as in the table of
+Section~\ref{sec:steps}. The voter posts the $n$ ciphertexts $c_k =
+\Enc(b_k; r_k)$ and $L + 3$ commitments:
+\[
+  C_\delta = \com_{\mathbf{g}'}(s; \rho_\delta), \quad
+  C_b = \com(b; \rho_b), \quad
+  C_p = \com(p; \rho_p), \quad
+  C_{X^{(t)}} = \com(X^{(t)}; \rho_{X^{(t)}}) \ \ (t < L).
+\]
+Everything but $C_\delta$ is under $\mathbf{g}_1$, and $C_\delta$ is too,
+because $\com_{\mathbf{g}'}(s; \rho) = \com_{\mathbf{g}_1}(Ms; \rho)$.
+
+\ex{With $\rho_\delta = 14$, $\rho_b = 3$, $\rho_p = 20$, $\rho_{X^{(0)}}
+= 9$, $\rho_{X^{(1)}} = 5$: $C_\delta = 32^{14} \cdot 32^{0} \cdot 8^{1}
+\cdot 9^{2} = 27$, which is the $C_\delta = 27$ of
+Section~\ref{sec:walk}, computed there from $\delta$ under
+$\mathbf{g}_1$. The voter never handles $\delta$ in this computation.
+Also $C_b = 4$, $C_p = 17$, $C_{X^{(0)}} = 42$, and $C_{X^{(1)}} = 21$.
+The ciphertexts are those of Section~\ref{sec:walk}, with randomness $r =
+(3, 6, 11, 2, 13, 17, 20, 8, 10)$.}
+
+\subsubsection*{Step 3: the first challenges and the derived values}
+After the ciphertexts and commitments are fixed, the verifier draws $\beta
+\in \Z_q^{n}$ and non-zero scalars $y, z$. Both sides then compute, by the
+homomorphisms,
+\[
+  C_\beta = \prod_k c_k^{\beta_k}, \qquad
+  C_0 = C_\delta \cdot C_b \cdot C_p^{-2} \cdot \prod_{t < L} C_{X^{(t)}}^{\,2^{t}} .
+\]
+The voter also knows the openings, $R = \langle \beta, r \rangle$ and
+$\rho^* = \rho_\delta + \rho_b - 2\rho_p + \sum_t 2^{t} \rho_{X^{(t)}}$.
+Because the committed vector $\delta + b - 2p + \sum_t 2^{t} X^{(t)}$ is
+zero for an honest voter, $C_0 = h_1^{\rho^*}$.
+
+\ex{$\beta = (2, 5, 1, 7, 3, 4, 6, 8, 9)$, $y = 4$, $z = 3$. Then $C_\beta
+= (32, 7)$ and $R = 5$, as in Section~\ref{sec:walk}. Also $C_0 = 27 \cdot
+4 \cdot 17^{-2} \cdot 42 \cdot 21^{2} = 8$, and $\rho^* = 14 + 3 - 40 + 9
++ 10 \equiv 19$, with $h_1^{19} = 32^{19} = 8$.}
+
+\subsubsection*{Step 4: the linear argument}
+The witness is $w = (s, b, \rho_\delta, \rho_b, R, \rho^*)$ of length $W'
+= m + n + 4$, and the linear map $\varphi' : \Z_q^{W'} \to \G^{5}$ is
+\[
+  \varphi'(w) = \big(\com_{\mathbf{g}'}(s; \rho_\delta),\;
+  \com(b; \rho_b),\; g^{R},\; g^{\langle \beta, b \rangle} h^{R},\;
+  h_1^{\rho^*}\big),
+\]
+with target $T' = (C_\delta, C_b, C_{\beta,1}, C_{\beta,2}, C_0)$. Every
+component is linear in $w$, so Section~\ref{sec:linsigma} applies: the voter
+draws $a \in \Z_q^{W'}$, announces $A = \varphi'(a)$, receives $c$, and
+answers $u = a + c\,w$. The verifier checks $\varphi'(u) = A \cdot
+T'^{\,c}$ componentwise. The rows do three jobs. The first shows that
+$C_\delta$ is in the image of $M$, the second and the next two tie the
+ciphertexts to $C_b$, and the fifth shows that $C_0$ commits to the zero
+vector. The field rows of the batched ballot are gone: the two relations
+they checked in a random direction now hold entry by entry, by binding.
+
+\ex{The witness, the announcement randomness, and the response at $c =
+5$, each split as $(s;\, b;\, \rho_\delta, \rho_b, R, \rho^*)$, are
+\begin{align*}
+  w &= (0, 1, 2;\ 0, 1, 1, 0, 0, 1, 0, 0, 0;\ 14, 3, 5, 19),\\
+  a &= (2, 4, 1;\ 5, 1, 0, 3, 2, 2, 4, 1, 6;\ 7, 8, 3, 10),\\
+  u &= (2, 9, 11;\ 5, 6, 5, 3, 2, 7, 4, 1, 6;\ 8, 0, 5, 13),
+\end{align*}
+and the announcement is $A = \varphi'(a) = (8, 8, 8, 14, 16)$. The verifier's five checks, where
+$\langle \beta, u_b \rangle = 2$:
+\begin{align*}
+  \com_{\mathbf{g}'}((2, 9, 11); 8) &= 7 = 8 \cdot 27^{5}, &
+  \com(u_b; 0) &= 14 = 8 \cdot 4^{5}, \\
+  g^{5} &= 32 = 8 \cdot 32^{5}, &
+  g^{2} h^{5} &= 16 = 14 \cdot 7^{5}, \\
+  h_1^{13} &= 3 = 16 \cdot 8^{5}.
+\end{align*}}
+
+\subsubsection*{Step 5: one zero argument for all the products}
+The quadratic relations are combined by powers of $z$ on the left-hand
+vectors. With $r = L + 3$ rows, the statement is
+$\sum_{i=1}^{r} a_i \star_y b_i = 0$ for
+\begin{center}
+\begin{tabular}{@{}llll@{}}
+\toprule
+row & left $a_i$ & right $b_i$ & commitments, left and right \\
+\midrule
+$1$ & $z\, b$ & $\delta$ & $C_b^{\,z}$, $C_\delta$ \\
+$2$ & $z\, p$ & $-\mathbf{1}$ & $C_p^{\,z}$, $\com(-\mathbf{1}; 0)$ \\
+$3 + t$ & $z^{2+t} X^{(t)}$ & $X^{(t)} - \mathbf{1}$ & $C_{X^{(t)}}^{\,z^{2+t}}$, $C_{X^{(t)}} \cdot \com(-\mathbf{1}; 0)$ \\
+$3 + L$ & $z^{2+L} b$ & $b - \mathbf{1}$ & $C_b^{\,z^{2+L}}$, $C_b \cdot \com(-\mathbf{1}; 0)$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+Expanding the sum as a polynomial in $z$ shows what it says:
+\[
+  z\,\big(b \star_y \delta - p \star_y \mathbf{1}\big)
+  + \sum_{t < L} z^{2 + t}\, X^{(t)} \star_y (X^{(t)} - \mathbf{1})
+  + z^{2 + L}\, b \star_y (b - \mathbf{1}) = 0 .
+\]
+The verifier computes all the commitments in the table from the posted
+ones, so no new commitment is posted. Rows $1$ and $2$ need the same
+weight, because only their sum vanishes; every other row vanishes by
+itself.
+
+The argument is the zero argument of Section~\ref{sec:zero} with $r$ rows,
+in the form the development uses. The voter draws blinding vectors $a_0,
+b_{\mathrm{m}} \in \Z_q^{n}$ with randomness $r_0, s_{\mathrm{m}}$, and
+defines
+\[
+  A(x) = a_0 + \sum_{i=1}^{r} x^{i} a_i, \qquad
+  B(x) = b_{\mathrm{m}} + \sum_{i=1}^{r} x^{r + 1 - i} b_i .
+\]
+In the product $A(x) \star_y B(x) = \sum_{k=0}^{2r} d_k x^{k}$, the pair
+$a_i, b_i$ always lands at $x^{r+1}$, so the coefficient $d_{r+1}$ is the
+claimed sum, which is zero. The voter announces $\com(a_0; r_0)$,
+$\com(b_{\mathrm{m}}; s_{\mathrm{m}})$, and $D_k = \com(d_k; t_k)$ for $k
+\le 2r$, over the first generator of the key, with $t_{r+1} = 0$, so that
+$D_{r+1} = 1$ is visibly a commitment to zero. After the challenge $x$ the
+voter answers with $A(x)$, $B(x)$, and the randomness $r_x$, $s_x$, $t_x$
+obtained by evaluating the same polynomials on the randomness. The
+verifier checks $D_{r+1} = 1$ and
+\begin{gather*}
+  \com(a_0; r_0) \prod_{i} (C_{a_i})^{x^{i}} = \com(A(x); r_x), \qquad
+  \com(b_{\mathrm{m}}; s_{\mathrm{m}}) \prod_{i} (C_{b_i})^{x^{r+1-i}} = \com(B(x); s_x),\\
+  \prod_{k} D_k^{x^{k}} = \com(A(x) \star_y B(x); t_x).
+\end{gather*}
+
+\ex{$y = 4$, $z = 3$, $r = 5$, $x = 6$. The weights are $z = 3$, $z^2 = 9$,
+$z^3 = 4$, $z^4 = 12$, so the rows are
+\begin{align*}
+  a_1 &= (0,3,3,0,0,3,0,0,0), & b_1 &= (0,1,2,22,0,1,21,22,0),\\
+  a_2 &= (0,3,6,0,0,3,0,0,0), & b_2 &= (22,22,22,22,22,22,22,22,22),\\
+  a_3 &= (0,0,9,9,0,0,0,9,0), & b_3 &= (22,22,0,0,22,22,22,0,22),\\
+  a_4 &= (0,0,0,0,0,0,4,0,0), & b_4 &= (22,22,22,22,22,22,0,22,22),\\
+  a_5 &= (0,12,12,0,0,12,0,0,0), & b_5 &= (22,0,0,22,22,0,22,22,22).
+\end{align*}
+The five values $a_i \star_4 b_i$ are $1, 22, 0, 0, 0$, which sum to $0$
+modulo $23$. Rows $1$ and $2$ cancel each other, and the three bit rows
+vanish alone. With $\com(-\mathbf{1}; 0) = 42$, the statement's commitments
+are
+\[
+  (C_{a_i}) = (17, 25, 7, 42, 2), \qquad (C_{b_i}) = (27, 42, 25, 36, 27).
+\]
+The voter announces, with $a_0 = (5,2,7,1,9,4,3,8,6)$, $r_0 = 11$,
+$b_{\mathrm{m}} = (3,6,1,8,2,5,7,4,9)$, $s_{\mathrm{m}} = 13$, and $t =
+(17,19,4,8,2,10,0,1,12,21,15)$:
+\begin{align*}
+  &\com(a_0; 11) = 37, \qquad \com(b_{\mathrm{m}}; 13) = 36,\\
+  &d = (22,21,2,2,4,20,\mathbf{0},19,14,10,4),\\
+  &D = (42,7,27,21,9,17,\mathbf{1},1,6,28,27).
+\end{align*}
+(The second $1$ in $D$ is a coincidence of the tiny group, where $g_1$ and
+$h_1$ have small relations.) The response is
+\begin{align*}
+  A(6) &= (5,14,1,13,9,16,12,20,6), & r_x &= 12,\\
+  B(6) &= (13,1,7,2,12,0,3,21,19), & s_x &= 21, \qquad t_x = 9.
+\end{align*}
+The verifier checks $D_6 = 1$, then that both sides of the first equation
+are $4$, both sides of the second are $21$, and both sides of the third are
+$12$, with $A(6) \star_4 B(6) = 13$ and $\com(13; 9) = 12$.}
+
+\subsubsection*{Step 6: the verifier and the Fiat--Shamir order}
+The verifier checks that there are $n$ ciphertexts, computes $C_\beta$,
+$C_0$, and the statement of the zero argument, checks the five equations
+of the linear argument, and checks the zero argument. The five challenges
+are hashed in this order:
+\begin{itemize}[nosep]
+  \item $\beta$ (one query per coordinate), $y$, and $z$, each with its own
+  tag, from the ciphertexts and the $L + 3$ commitments;
+  \item $c$ from those and the linear announcement $A$;
+  \item $x$ from those and the announcement of the zero argument.
+\end{itemize}
+The honest voter computes the ballot in three passes, as before. The first
+fixes the ciphertexts and commitments, hence $\beta$, $y$, $z$. The second
+computes $A$, which depends on $\beta$, and the zero argument's
+announcement, whose $d$ depends on $y$ and $z$, hence $c$ and $x$. The
+third computes the responses.
+
+\subsubsection*{Step 7: soundness}
+The statement below is the mechanised theorem \rocq{ballot3\_sound}, and
+the proof follows the mechanised one. It has the same shape as
+Theorem~\ref{thm:b2sound}, and it assumes the same bound on the
+characteristic of the field, above $3 \cdot 2^{L} + 2$.
+
+\begin{proposition}[\rocq{ballot3\_sound}]\label{prop:v3sound}
+Suppose a simpler ballot is accepted by the linear argument at a base
+$\beta$ with two challenges $c \ne c'$ on one announcement, and for every
+coordinate $k$ at a vector differing from $\beta$ only in $\beta_k$, again
+with two challenges; and by the zero argument at $n$ distinct non-zero $y$
+and, for each, $L + 2$ distinct non-zero $z$, with $2r + 1 = 2L + 7$ distinct
+challenges $x$ on one announcement for each pair $(y, z)$. Then either the
+binding of $(h_1, \mathbf{g}_1)$ is broken, or there is $\pos \in \{0,
+\ldots, 2^{L+1}\}^m$ such that every $c_{ij}$ decrypts to
+$g^{[\pos_i < \pos_j]}$.
+\end{proposition}
+\begin{proof}
+\emph{The linear witness.} The two challenges at the base give, by the
+lemma of Section~\ref{sec:linsigma}, values $s$, $b$, $\rho_\delta$,
+$\rho_b$, $R$, $\rho^*$ with $C_\delta = \com_{\mathbf{g}'}(s; \rho_\delta)
+= \com(Ms; \rho_\delta)$, $C_b = \com(b; \rho_b)$, $C_\beta = \Enc(\langle
+\beta, b \rangle; R)$, and $C_0 = h_1^{\rho^*}$.
+
+\emph{The link.} Each $\beta$ differing in coordinate $k$ gives a witness
+opening $C_b$; it opens to the same $b$ unless binding is broken. The
+division-and-root argument (\rocq{beta\_bits}) then gives $\Dec(c_k) =
+g^{b_k}$ for every $k$.
+
+\emph{The zero argument.} At each $(y, z)$, the $2r + 1$ transcripts
+extract (\rocq{zero\_soundness}) openings of all the commitments in the
+table of Step 5 with $\sum_i a_i \star_y b_i = 0$, or a binding break.
+Dividing by $z^{i}$, which is non-zero, turns an opening of $C^{z^{i}}$
+into an opening of $C$. By binding, all these openings agree: there are
+fixed $\delta'$, $b$, $p$, and $X^{(t)}$ opening $C_\delta$, $C_b$, $C_p$,
+and $C_{X^{(t)}}$ at every $(y, z)$. By binding again, the right-hand
+openings are $-\mathbf{1}$, $X^{(t)} - \mathbf{1}$, and $b - \mathbf{1}$,
+since multiplying by $\com(-\mathbf{1}; 0)^{-1}$ maps them to openings of
+$C_{X^{(t)}}$ and $C_b$.
+
+\emph{Separating $z$, then $y$.} For fixed $y$, divide the sum in Step 5
+by $z$. This leaves a polynomial in $z$ of degree $L + 1$ with $L + 2$
+distinct roots, so every coefficient vanishes: $b \star_y \delta' - p
+\star_y \mathbf{1} = 0$, $X^{(t)} \star_y (X^{(t)} - \mathbf{1}) = 0$, and
+$b \star_y (b - \mathbf{1}) = 0$. Each of these holds at $n$ distinct
+non-zero $y$, so the argument of Section~\ref{sec:zero} gives $p = b \circ
+\delta'$, and every entry of $X^{(t)}$ and of $b$ is a bit.
+
+\emph{The derived key.} $C_\delta$ has the openings $(\delta',
+\rho_{\delta'})$ and $(Ms, \rho_\delta)$ under $\mathbf{g}_1$. By binding,
+$\delta' = Ms$.
+
+\emph{The expansion of $v$.} By the homomorphism, $C_0$ is a commitment to
+$\delta' + b - 2p + \sum_t 2^{t} X^{(t)}$. It is also $h_1^{\rho^*} =
+\com(\mathbf{0}; \rho^*)$. By binding, $\sum_t 2^{t} X^{(t)} = -\delta' + 2p
+- b$.
+
+\emph{Decoding.} These are the relations reached at Step 6 of the proof of
+Theorem~\ref{thm:b2sound}, and the same decoding gives $\pos$
+(\rocq{decode\_positions}). With the link, $c_{ij}$ decrypts to
+$g^{[\pos_i < \pos_j]}$.
+\end{proof}
+
+The number $L + 2$ is one less than the $L + 3$ rows because the polynomial
+in $z$ has no constant term. Counting the bad events as usual, a cheating
+voter's probability of success is at most about
+\[
+  \frac{1}{q} \ (\text{for } \beta) + \frac{n}{q} \ (\text{for } y)
+  + \frac{L + 1}{q} \ (\text{for } z) + \frac{1}{q} \ (\text{for } c) +
+  \frac{2L + 6}{q} \ (\text{for } x),
+\]
+which is negligible at $256$-bit $q$. This count is an estimate, not a
+mechanised bound; the development's theorems, here as elsewhere, stop at
+the rewinding form above.
+
+\subsubsection*{Step 8: zero-knowledge}
+This is the mechanised theorem \rocq{ballot3\_zk}, in the same
+permutation form as \rocq{ballot2\_zk}. The simulator follows that proof, with commitment keys
+of the form $g_{1,j} = h_1^{\gamma_j}$. It draws $L + 3$ uniform exponents
+and sets the commitments to the corresponding powers of $h_1$. It computes
+$C_\beta$, $C_0$, and the statement of the zero argument from them, and it
+runs the simulators of the linear argument and of the zero argument.
+Commitments with fresh randomness are uniform in $\G$ whatever they commit
+to, so these are distributed as in the real ballot. The equation $C_0 =
+h_1^{\rho^*}$ does not distinguish the two, because $h_1$ generates $\G$,
+so every group element has this form. The derived key causes no difficulty:
+the relation $\prod_i g'_i = 1$ only means that $C_\delta$ has many openings
+under $\mathbf{g}'$, and the factor $h_1^{\rho_\delta}$ still makes
+$C_\delta$ uniform.
+The ciphertexts, as in both other ballots, are covered by IND-CPA.
+
+\subsubsection*{Step 9: testing on cheating ballots}
+Running this protocol on random challenges in the toy group, with the keys
+above, gives the following. The cheater here is the honest algorithm run
+on the wrong vectors, with $D_{r+1}$ set to $1$ regardless; a cleverer
+cheater can also try to guess $x$, which is the last term of the count
+above.
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}Xlr@{}}
+\toprule
+ballot & runs and acceptances & where it fails \\
+\midrule
+honest & $500$, all accepted & --- \\
+$b_{AA} = -1$, with $X^{(0)}_{AA} = 1$ & $2000$, none accepted & zero argument \\
+$b_{BA} = 1$, fake $p_{BA} = 0$, $v_{BA} = 0$ & $2000$, none accepted & zero argument \\
+$X^{(0)}_{CA} = 2$, $X^{(1)}_{CA} = 0$ & $2000$, none accepted & zero argument \\
+$\delta_{BA} = 1$ not from $s$, $b_{BA} = p_{BA} = 1$ & $4000$, $153$ accepted & linear, row $C_\delta$ \\
+$X^{(0)}_{AA} = 1$, which breaks $C_0$ & $4000$, $147$ accepted & linear, row $C_0$ \\
+$b_{CA} = 1$ encrypted, honest $C_b$ & $4000$, $322$ accepted & linear, link rows \\
+\bottomrule
+\end{tabularx}
+\end{center}
+The three zero-argument cheats each leave one wrong entry, so their error
+is a single term $e\, y^{j} z^{i}$, which has no non-zero root in $y$ or
+$z$, and this cheater always fails. The linear cheats are accepted exactly
+when $c = 0$, and in the last row also when $\beta_{CA} = 0$: these are the
+$1/23$ events of the tiny field, and the script confirmed in all $12{,}000$
+runs that acceptance happens exactly in these cases.
+
+\subsubsection*{Step 10: the size, term by term}
+Let $\lvert \G \rvert$ and $\lvert \Z_q \rvert$ be the sizes of a group and
+a field element, $256$ and $32$ bytes at the parameters of
+Table~\ref{tab:simpler}. The whole ballot has
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+part & group elements & field elements \\
+\midrule
+ciphertexts & $2n$ & \\
+commitments & $L + 3$ & \\
+linear argument & $5$ & $m + n + 4$ \\
+zero argument & $2r + 3 = 2L + 9$ & $2n + 3$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+The element $D_{r+1} = 1$ is counted in the zero argument but could be
+omitted. At $m = 17$, $n = 289$, $L = 5$, the proof part is $3L + 17 = 32$
+group and $m + 3n + 7 = 891$ field elements, that is, $8.2 + 28.5 \approx
+37$\,KB. The ciphertexts add $578 \cdot 256$ bytes, about $148$\,KB, giving
+about $185$\,KB. The extracted ballot (\rocq{simple.exe}, with the keys
+hashed to the group as for the batched ballot) has exactly $610$ group and
+$891$ field elements, $180$\,KB, and takes $0.67$\,s to prove and
+$1.5$\,s to verify at $m = 17$; the batched ballot, run in the same
+session on the same machine, takes $4.2$\,s and $5.7$\,s. The small gap
+between $185$ and $180$\,KB is the rounding of the per-element sizes.
+
+\subsubsection*{Step 11: what the mechanisation reused}
+The mechanisation, \rocq{Frontend/SchulzeSimple.v}, is about $1{,}300$
+lines with no axioms. It reuses the zero argument
+(\rocq{zero\_soundness}), the linear argument (\rocq{lin\_soundness}),
+the link (\rocq{beta\_bits}), and the decoding
+(\rocq{decode\_positions}) as they stand. Three things are new: the
+definition of the ballot with its $\varphi'$ (\rocq{phi3}) and the rows
+of the zero argument as functions of the row index (\rocq{rowA},
+\rocq{rowB}); the derived-key lemma $\com_{\mathbf{g}'}(s; \rho) =
+\com_{\mathbf{g}_1}(Ms; \rho)$ (\rocq{com\_gd}), which is a reordering of
+a double product (\rocq{com\_lincomb}); and the separation of the rows by
+$z$ (\rocq{weighted\_sum\_eval}, \rocq{coeffs\_vanish}), the same
+Vandermonde argument as for $y$ (\rocq{poly\_vanish\_mul}). The openings
+of $C_p$ and the $C_{X^{(t)}}$ are taken from one accepted zero argument
+(\rocq{zero\_open\_ref}) and shown by binding to be the ones every other
+accepted $(y, z)$ opens (\rocq{zero\_open\_at}). The zero-knowledge proof
+(\rocq{ballot3\_zk}) is the batched one with $L + 3$ commitment
+randomnesses in the bijection and one zero argument instead of three;
+$C_\delta$ is rewritten as a commitment under $\mathbf{g}_1$ by
+\rocq{com\_gd}, so the derived key needs no discrete logarithms of its
+own.
+
+\section{A ballot from start to finish: $A > B > C$}\label{sec:walk}
+This section takes one ballot, $A > B > C$, and writes down every number
+of both protocols in the toy group ($p = 47$, $q = 23$, $g = 2$, $x = 5$,
+$h = 32$). All randomness is chosen by hand so that the reader can redo
+each equation; a real client draws it uniformly. The ballot is then
+aggregated with ballot 1 of the running example and the two-ballot
+election is certified.
+
+\subsection{Positions and bits}
+$A > B > C$ is the position vector $s = (s_A, s_B, s_C) = (0, 1, 2)$. The
+six off-diagonal cells, with $\delta_{ij} = s_j - s_i$ and $b_{ij} =
+[\delta_{ij} \ge 1]$:
+\begin{center}
+\begin{tabular}{@{}lrr@{\qquad}lrr@{}}
+\toprule
+cell & $\delta$ & $b$ & cell & $\delta$ & $b$ \\
+\midrule
+$(A,B)$ & $1$ & $1$ & $(B,A)$ & $-1$ & $0$ \\
+$(A,C)$ & $2$ & $1$ & $(C,A)$ & $-2$ & $0$ \\
+$(B,C)$ & $1$ & $1$ & $(C,B)$ & $-1$ & $0$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+The ballot contributes one to $D_{AB}$, $D_{AC}$ and $D_{BC}$ and nothing
+else, as a ranking $A > B > C$ should.
+
+\subsection{The first ballot}
+
+\paragraph{Ciphertexts} The voter encrypts the positions with randomness
+$r_A = 4$, $r_B = 9$, $r_C = 15$:
+\[
+  \Enc(0; 4) = (16, 6),\qquad \Enc(1; 9) = (42, 1),\qquad \Enc(2; 15) = (9, 21),
+\]
+and the bits with randomness $6, 11, 2, 17, 20, 8$ in the order of
+Table~\ref{tab:walk1}. The verifier derives $\Enc(\delta_{ij}) =
+\Enc(s_j) / \Enc(s_i)$ and forms the shifted ciphertext $\Enc(b_{ij})^7
+\cdot \Enc(\delta_{ij})$, whose plaintext is $t = 7 b_{ij} + \delta_{ij}$.
+For instance, for $(C, A)$: $\Enc(\delta_{CA}) = (16, 6) / (9, 21) = (16
+\cdot 9^{-1}, 6 \cdot 21^{-1}) = (7, 7)$, which is $\Enc(-2; 4 - 15) =
+\Enc(-2; 12)$; and $(6, 21)^7 \cdot (7, 7) = (28, 24) = \Enc(-2; 7 \cdot
+20 + 12) = \Enc(-2; 14)$.
+
+\begin{table}[t]
+\centering
+\caption{The first ballot for $A > B > C$: the six pair cells. The
+randomness of the shifted ciphertext is $7 r_b + r_j - r_i$.}
+\label{tab:walk1}
+\begin{tabular}{@{}lrrcccr@{}}
+\toprule
+cell & $\delta$ & $b$ & $\Enc(b; r_b)$ & $\Enc(\delta)$ derived & shifted & $t$ \\
+\midrule
+$(A,B)$ & $1$ & $1$ & $(17,21) = \Enc(1;6)$ & $(32,8) = \Enc(1;5)$ & $(2,14)$ & $8$ \\
+$(A,C)$ & $2$ & $1$ & $(27,37) = \Enc(1;11)$ & $(27,27) = \Enc(2;11)$ & $(3,7)$ & $9$ \\
+$(B,A)$ & $-1$ & $0$ & $(4,37) = \Enc(0;2)$ & $(25,6) = \Enc(-1;18)$ & $(42,12)$ & $-1$ \\
+$(B,C)$ & $1$ & $1$ & $(36,36) = \Enc(1;17)$ & $(17,21) = \Enc(1;6)$ & $(37,7)$ & $8$ \\
+$(C,A)$ & $-2$ & $0$ & $(6,21) = \Enc(0;20)$ & $(7,7) = \Enc(-2;12)$ & $(28,24)$ & $-2$ \\
+$(C,B)$ & $-1$ & $0$ & $(21,36) = \Enc(0;8)$ & $(36,9) = \Enc(-1;17)$ & $(16,3)$ & $-1$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Every $t$ is in $\{-3, \ldots, 0\} \cup \{8, 9, 10\}$, as it must be for
+an honest ballot. All proofs below use the single challenge $c = 17$; in
+the deployed ballot $c$ is the hash of the credential, all ciphertexts and
+all announcements.
+
+\paragraph{A position proof in full} Candidate $A$: $C = \Enc(0; 4) =
+(16, 6)$, messages $\{0, 1, 2, 3\}$, true branch $k = 0$. The voter
+simulates branches $1, 2, 3$ by choosing $(c_k, z_k) = (3, 7), (8, 19),
+(12, 2)$ and computing $A_k = (g^{z_k} C_1^{-c_k},\; h^{z_k} (C_2 /
+g^{k})^{-c_k})$:
+\[
+  A_1 = (25, 2),\quad A_2 = (37, 6),\quad A_3 = (1, 14);
+\]
+and computes the true branch honestly with $a_0 = 13$: $A_0 = (g^{13},
+h^{13}) = (14, 3)$. After the challenge $c = 17$: $c_0 = 17 - (3 + 8 +
+12) = -6 \equiv 17$, $z_0 = 13 + 17 \cdot 4 = 81 \equiv 12$. The verifier
+checks $c_0 + c_1 + c_2 + c_3 \equiv 17$ and, for every branch, $g^{z_k} =
+A_{k,1} C_1^{c_k}$ and $h^{z_k} = A_{k,2} (C_2 / g^k)^{c_k}$; for the true
+branch: $2^{12} = 7 = 14 \cdot 16^{17}$ and $32^{12} = 28 = 3 \cdot
+6^{17}$ (all modulo $47$). The simulated branches hold by
+construction. Nothing in the transcript says which branch was honest.
+
+\paragraph{A pair cell in full} Cell $(C, A)$: $\Enc(b_{CA}) = (6, 21)$
+with $b_{CA} = 0$, randomness $20$.
+\emph{0/1 proof}: branch $1$ simulated with $(c_1, z_1) = (5, 9)$, $A_1 =
+(2, 37)$; branch $0$ honest with $a_0 = 21$, $A_0 = (12, 14)$; $c_0 = 17 -
+5 = 12$, $z_0 = 21 + 12 \cdot 20 = 261 \equiv 8$. \emph{Membership proof}
+on the shifted ciphertext $(28, 24) = \Enc(-2; 14)$, messages $\{-3, -2,
+-1, 0, 8, 9, 10\}$, true branch $-2$: simulated $(c_k, z_k)$ for $k = -3,
+-1, 0, 8, 9, 10$ are $(2,5), (6,8), (1,14), (4,3), (9,20), (7,11)$ with
+announcements $(1,12), (18,36), (1,4), (18,32), (42,17), (32,36)$; the
+honest branch uses $a = 3$, $A_{-2} = (8, 9)$, $c_{-2} = 17 - (2 + 6 + 1 +
+4 + 9 + 7) = -12 \equiv 11$, $z_{-2} = 3 + 11 \cdot 14 = 157 \equiv 19$.
+Check of the honest branch: $g^{19} = 3 = 8 \cdot 28^{11}$ and $h^{19}
+= 8 = 9 \cdot (24 \cdot g^{2})^{11}$ (the message is $-2$, so $C_2 /
+g^{-2} = C_2 \cdot g^{2}$). The cell costs $2 + 7 = 9$ Chaum--Pedersen transcripts.
+
+\paragraph{What a cheater runs into} Suppose the voter wants $b_{CA} = 1$
+instead. The shifted plaintext would be $t = 7 + (-2) = 5$, which is in no
+branch's message, so no branch can be run honestly. The voter can
+simulate all seven branches, but their challenges $c_k$ are then fixed
+before $c = H(\ldots)$ is known, and the verifier's check $\sum_k c_k = c$
+holds with probability $1/23$ (in a real group, $1/q \approx 2^{-256}$).
+This is the special-soundness argument in one sentence: two different
+$c$'s with the same announcements force a difference in some branch's
+challenge, and that branch reveals the randomness of the ciphertext for
+its message.
+
+Concretely, take the cheating row $(B, A)$ of Table~\ref{tab:ballot1}:
+the voter encrypts $b_{BA} = 1$ with randomness $2$, $\Enc(1; 2) = (4,
+27)$, while the derived $\Enc(\delta_{BA}) = \Enc(-1; 18)$ is what it is.
+The shifted ciphertext is $\Enc(1; 2)^7 \cdot \Enc(-1; 18) = \Enc(6; 9) =
+(42, 32)$. The voter knows that $6$ is in no branch, but tries the branch
+for message $8$ honestly anyway (the branch an honest $b = 1$ cell would
+use): announcement $(g^3, h^3) = (8, 9)$, challenge $c = 17$, response $z
+= 3 + 17 \cdot 9 \equiv 18$. The first equation holds, $g^{18} = 25 = 8
+\cdot 42^{17}$, because the voter does know the randomness $9$. The
+second fails: $h^{18} = 12$ but $9 \cdot (32 / g^{8})^{17} = 9 \cdot
+6^{17} = 37$, because $C_2 / g^8 = g^{6 - 8} h^{9}$ is not a pure power
+of $h$; the equation would need $g^{-2c} = 1$, i.e.\ $c = 0$. Any other
+choice fares the same: a branch run honestly fails its second equation,
+and a fully simulated set of branches fails the challenge-sum check.
+
+\subsection{The batched ballot}
+
+\paragraph{The vectors} With $n = 9$ cells in the order $AA, AB, AC, BA,
+BB, BC, CA, CB, CC$ and $L = 2$:
+\begin{align*}
+  s &= (0, 1, 2, 0, 0, 0, 0, 0, 0) \quad\text{(padded to length $9$)}, \\
+  \delta &= (0, 1, 2,\; -1, 0, 1,\; -2, -1, 0), \\
+  b &= (0, 1, 1,\; 0, 0, 1,\; 0, 0, 0), \\
+  p = b \circ \delta &= (0, 1, 2,\; 0, 0, 1,\; 0, 0, 0), \\
+  v = -\delta + 2p - b &= (0, 0, 1,\; 1, 0, 0,\; 2, 1, 0), \\
+  X^{(0)} &= (0, 0, 1,\; 1, 0, 0,\; 0, 1, 0), \qquad X^{(1)} = (0, 0, 0,\; 0, 0, 0,\; 1, 0, 0).
+\end{align*}
+Check cell $CA$: $v = 2 + 0 - 0 = 2 = 0 + 2 \cdot 1$. Check cell $AC$: $v
+= -2 + 4 - 1 = 1$. Every $v$ is in $\{0, 1, 2, 3\}$ and every $X$ entry
+is a bit.
+
+\paragraph{Ciphertexts and commitments} The nine bits are encrypted with
+randomness $r = (3, 6, 11, 2, 13, 17, 20, 8, 10)$:
+\[
+  c = \big((8,9), (17,21), (27,37), (4,37), (14,3), (36,36), (6,21), (21,36), (37,16)\big).
+\]
+The commitment keys are $h_1 = 32$, $\mathbf{g}_1 = (34, 8, 27, 14, 36,
+3, 17, 42, 12)$ and $\mathbf{g}_2 = \mathbf{g}_1 \,\|\, (16, 21, 37, 7,
+28, 9, 18, 25, 6)$ (all in the subgroup; in a deployment they are hashed
+to the group). With randomness $\rho = (\rho_s, \rho_\delta, \rho_b,
+\rho_p, \rho_X) = (6, 14, 3, 20, 9)$:
+\[
+  C_s = 42,\quad C_\delta = 27,\quad C_b = 4,\quad C_p = 17,\quad C_X = 4 .
+\]
+(That $C_b = C_X$ is a coincidence of the small group; they are
+commitments over different keys.) For instance $C_s = 32^6 \cdot 8^{1}
+\cdot 27^{2} = 42$.
+
+\paragraph{The random linear combination} The verifier's coefficients,
+drawn after the ballot is posted, are $\beta = (2, 5, 1, 7, 3, 4, 6, 8,
+9)$. Then $\langle \beta, b \rangle = 5 + 1 + 4 = 10$ and $\langle \beta,
+r \rangle = 5$ (mod $23$), and indeed
+\[
+  C_\beta = \prod_k c_k^{\beta_k} = (32, 7) = \Enc(10; 5).
+\]
+The voter proves that $C_\beta$ encrypts the inner product of $\beta$ with
+the \emph{committed} $b$, with randomness $R = 5$. Had the voter committed
+to $b' = b$ with $b'_{CA} = 1$, the inner product would be $10 + 6 = 16
+\ne 10$, and the row $g^{\langle \beta, b' \rangle} h^{R}$ could not match
+$C_{\beta, 2}$ for any $R$ consistent with $C_{\beta,1} = g^R$.
+
+\paragraph{The field rows} With $\gamma_1 = (1, \ldots, 9)$ and $\gamma_2
+= (9, \ldots, 1)$: $\langle \gamma_1, \delta - Ms \rangle = 0$ and
+$\langle \gamma_2, X^{(0)} + 2 X^{(1)} + \delta - 2p + b \rangle = 0$, as
+the reader can check entry by entry (each entry of the two vectors is
+already $0$). If the voter committed to $\delta'$ with $\delta'_{CA} = 1$
+instead of $-2$, the first row would be $\langle \gamma_1, \delta' - Ms
+\rangle = 7 \cdot 3 = 21 \ne 0$.
+
+\paragraph{The linear argument, three rows of it} The witness is $w = (s,
+\delta, b, p, X, \rho_s, \rho_\delta, \rho_b, \rho_p, \rho_X, R)$ of
+length $W = 3 + 27 + 18 + 6 = 54$ (the development pads $s$ to $m$
+entries, not $n$; the padding here is only for display). The prover draws
+$a \in \Z_{23}^{54}$, announces $A = \varphi(a)$, receives $c = 5$, and
+answers $z = a + 5 w$. Three rows, with the relevant slices of $a$
+chosen as $a_s = (2, 4, 1, 0, \ldots)$, $a_{\rho_s} = 7$, $a_R = 3$,
+$a_\delta = (5, 1, 0, 3, 2, 2, 4, 1, 6)$:
+\begin{itemize}[nosep]
+  \item Row $C_s$: $A_1 = \com(a_s; a_{\rho_s}) = 8$. Response $z_s = a_s +
+  5 s = (2, 9, 11, 0, \ldots)$, $z_{\rho_s} = 7 + 5 \cdot 6 = 37 \equiv
+  14$. Check: $\com(z_s; z_{\rho_s}) = 4$ and $A_1 \cdot C_s^{5} = 8 \cdot
+  42^5 = 4$.
+  \item Row $g^R$: $A_6 = g^{3} = 8$, $z_R = 3 + 5 \cdot 5 = 28 \equiv 5$.
+  Check: $g^{5} = 32 = A_6 \cdot C_{\beta,1}^{5} = 8 \cdot 32^5$.
+  \item Field row $\gamma_1$: $A_8 = \langle \gamma_1, a_\delta - M a_s
+  \rangle = 10$. Check: $\langle \gamma_1, z_\delta - M z_s \rangle = 10 =
+  A_8 + 5 \cdot 0$.
+\end{itemize}
+The other six rows are checked the same way; the whole argument is one
+announcement of $7$ group and $2$ field elements and one response of
+$54$ field elements.
+
+\paragraph{The zero arguments} At $y_1 = 4$ the product relation is
+$\sum_{j} 4^{j+1} (b_j \delta_j - p_j) = 0$ because every term is $0$;
+likewise the bit relations $\sum_j 4^{j+1} X_j (X_j - 1) = 0$ and $\sum_j
+4^{j+1} b_j (b_j - 1) = 0$. The arguments themselves are the library's
+Bayer--Groth zero arguments on the commitments $(C_b, C_p)$ against
+$(C_\delta, \com(-\mathbf{1}; 0))$, $C_X$ against $C_X \cdot
+\com(-\mathbf{1}; 0)$, and $C_b$ against $C_b \cdot \com(-\mathbf{1};
+0)$. The bit argument on $b$, at $y_3 = 4$ and $x = 6$, runs as follows
+(every number checked by script; the weights $4^j$ for $j = 1, \ldots, 9$
+are $4, 16, 18, 3, 12, 2, 8, 9, 13$):
+\begin{align*}
+  &\text{claim:} && b \star_4 (b - \mathbf{1}) = 0, \quad C_b = 4, \quad
+     C_{b - \mathbf{1}} = C_b \cdot \com(-\mathbf{1}; 0) = 27;\\
+  &\text{announce:} && a_0 = (5,2,7,1,9,4,3,8,6),\ \com(a_0; 11) = 37;\\
+  & && c_0 = (3,6,1,8,2,5,7,4,9),\ \com(c_0; 13) = 36;\\
+  & && d_0 = 22,\ D_0 = \com(22; 17) = 42; \quad d_1 = 3,\ D_1 = \com(3; 19) = 2;\\
+  &\text{respond:} && A(6) = a_0 + 6b = (5,8,13,1,9,10,3,8,6), \text{ randomness } 11 + 6 \cdot 3 = 6;\\
+  & && C(6) = 6(b - \mathbf{1}) + c_0 = (20,6,1,2,19,5,1,21,3), \text{ randomness } 6 \cdot 3 + 13 = 8;\\
+  & && t = 17 + 6 \cdot 19 = 16;\\
+  &\text{verify:} && \com(A(6); 6) = 24 = 37 \cdot 4^6, \qquad
+     \com(C(6); 8) = 28 = 27^6 \cdot 36,\\
+  & && A(6) \star_4 C(6) = 17 = 22 + 6 \cdot 3, \qquad \com(17; 16) = 9 = 42 \cdot 2^6 .
+\end{align*}
+All arithmetic is modulo $23$ for vectors and scalars and modulo $47$ for
+group elements. Had the voter set $b_{CA} = 2$, the claim would be $b
+\star_4 (b - \mathbf{1}) = 16$: a non-zero coefficient of $x^2$ with no
+commitment to absorb it, so the last check fails for all but at most two
+values of $x$. The product argument has two rows and runs the same way
+with polynomials of degree $2$ in $x$. What matters for soundness is the
+polynomial view in $y$: for the cheating
+vector $b'$ above, $b'_{CA} \delta_{CA} - p'_{CA}$ is $-2 - p'_{CA}$, so
+either $p'_{CA} = -2$ (and then $v'_{CA} = 2 - 4 - 1 = -3 \equiv 20$, not
+a sum of two bits, caught by the bit argument on $X$) or the product
+relation has a non-zero coefficient at $y^{7}$ and holds for at most $9$
+of the $22$ non-zero values of $y$.
+
+\subsection{Aggregation with ballot 1}
+Ballot 1 of the running example ($A > B = C$, $s = (0, 1, 1)$) has bits
+$(0, 1, 1, 0, 0, 0, 0, 0, 0)$; encrypt them with randomness $1, \ldots,
+9$. Multiplying cell by cell with the ciphertexts of $A > B > C$ above
+gives the aggregate
+\[
+  \big((16,6), (21,3), (28,8), (17,34), (25,12), (1,2), (16,6), (18,27), (3,8)\big),
+\]
+which the trustees decrypt to $(1, 4, 4, 1, 1, 2, 1, 1, 1) = (g^0, g^2,
+g^2, g^0, g^0, g^1, g^0, g^0, g^0)$: the margins of the two-ballot
+election are $D_{AB} = 2$, $D_{AC} = 2$, $D_{BC} = 1$ and all others
+$0$. Nobody needed a key to compute the aggregate; the key was used once,
+by the trustees, in private.
+
+\subsection{The certificate for the two-ballot election}
+$N = 2$, $K = 2N + 1 = 5$. Defeats: $d_{AB} = 2$ ($2 > 0$), $d_{AC} = 2$,
+$d_{BC} = 1$, all others $0$. Strongest paths: $p_{AB} = 2$, $p_{AC} = 2$,
+$p_{BC} = 1$, $p_{BA} = p_{CA} = p_{CB} = 0$. Winner $A$: $p_{AB} = 2 \ge
+p_{BA} = 0$ and $p_{AC} = 2 \ge p_{CA} = 0$. The trustees publish:
+\begin{itemize}[nosep]
+  \item[(i)] nine fresh encryptions $\Enc'(D_{ij})$ with decryption
+  proofs that $\Enc'(D_{ij}) / \Enc(D_{ij})$ decrypts to $g^0$;
+  \item[(ii)] $\Enc(d_{ij})$ with $d_{ij} \in \{0, 1, 2\}$ and the
+  disjunction: for $(A, B)$, $\Delta = 2 - 0 = 2$ and the second branch
+  $5(2 - 2) + 2 = 2 \in \{1, 2\}$; for $(B, A)$, $\Delta = -2$ and the
+  first branch $5 \cdot 0 - 2 = -2 \in \{-2, -1, 0\}$; for $(B, C)$,
+  $\Delta = 1$, second branch $5 \cdot 0 + 1 = 1$; for $(C, B)$, first
+  branch $-1$;
+  \item[(iii)] $\Enc(p_{ij})$ with $p_{ij} - d_{ij} \in \{0, 1, 2\}$ (all
+  differences are $0$); the $27$ closure disjunctions, e.g.\ $(B, C)$
+  through $A$: $p_{BC} - p_{BA} = 1 \in \{0,1,2\}$ holds (first branch),
+  and $(A, C)$ through $B$: $p_{AC} - p_{AB} = 0$ holds; and witness
+  paths, here all direct edges, e.g.\ $A \to B$ with $d_{AB} - p_{AB} =
+  0$;
+  \item[(iv)] for $w = A$: $p_{AB} - p_{BA} = 2$ and $p_{AC} - p_{CA} =
+  2$, both in $\{0, 1, 2\}$.
+\end{itemize}
+A certificate for $B$ would fail at (iv): $p_{BA} - p_{AB} = -2$. A
+certificate claiming $p_{CA} = 2$ (to help $C$) would fail at (iii): no
+path from $C$ to $A$ has an edge of strength $\ge 2$, since $d_{CA} =
+d_{CB} = 0$, so no witness path can be proved.
+
+\section{The tally certificate}\label{sec:tally}
+
+\subsection{What the trustees publish}
+Let $N$ be the number of accepted ballots, so $0 \le D_{ij} \le N$. The
+trustees decrypt $\Enc(D)$ among themselves, compute $d$, $p$ and the
+winner $w$ in private, and publish a certificate over \emph{encrypted}
+values. The only primitive it needs is the comparison of two encrypted
+integers: $\Enc(u) / \Enc(u')$ encrypts $u - u'$, and $u \ge u'$ is the
+membership statement $u - u' \in \{0, \ldots, N\}$, an $(N+1)$-branch
+\rocq{EncProof}. The four parts:
+\begin{enumerate}[nosep]
+  \item[(i)] \emph{Re-encryption.} For every pair, $\Enc'(D_{ij})$, a fresh
+  encryption with randomness the trustees know, and a \rocq{DecProof} that
+  $\Enc'(D_{ij}) / \Enc(D_{ij})$ decrypts to $g^0$. All later statements
+  are about $\Enc'$, whose randomness the trustees know, which is what
+  lets them prove things about it.
+  \item[(ii)] \emph{Defeats.} $\Enc(d_{ij})$ with a range proof $d_{ij} \in
+  \{0, \ldots, N\}$ and a disjunction, with $\Delta = D_{ij} - D_{ji}$ and
+  $K = 2N + 1$:
+  \[
+    \big(K d_{ij} + \Delta \in \{-N, \ldots, 0\}\big) \;\vee\;
+    \big(K (d_{ij} - D_{ij}) + \Delta \in \{1, \ldots, N\}\big),
+  \]
+  the shift trick of Section~\ref{sec:ballot1} again. The first branch is
+  possible only for $d_{ij} = 0$ and $\Delta \le 0$; the second only for
+  $d_{ij} = D_{ij}$ and $\Delta \ge 1$ (proof below).
+  \item[(iii)] \emph{Strongest paths.} $\Enc(p_{ij})$ with: $p_{ij} -
+  d_{ij} \in \{0, \ldots, N\}$ for every pair; for every $i, j, k$, the
+  disjunction $p_{ij} - p_{ik} \in \{0, \ldots, N\} \vee p_{ij} - p_{kj}
+  \in \{0, \ldots, N\}$, i.e.\ $p_{ij} \ge \min(p_{ik}, p_{kj})$; and for
+  every pair a witness path $i = u_0, \ldots, u_\ell = j$ with a range
+  proof $d_{u_t u_{t+1}} - p_{ij} \in \{0, \ldots, N\}$ on every edge.
+  \item[(iv)] \emph{Winner.} $p_{wj} - p_{jw} \in \{0, \ldots, N\}$ for
+  every $j \ne w$.
+\end{enumerate}
+All proofs share one Fiat--Shamir challenge
+(\rocq{nizk\_generate\_tally}); the verifier recomputes it and checks every
+proof against the aggregate (\rocq{verify\_tally}).
+
+\ex{In the running example, $N = 5$, $K = 11$. Part (ii) for $(A, B)$:
+$d_{AB} = 3$, $\Delta = 3 - 2 = 1$; the second branch, $K(3 - 3) + 1 = 1
+\in \{1, \ldots, 5\}$, is proved. For $(B, A)$: $d_{BA} = 0$, $\Delta =
+-1$; the first branch, $0 - 1 = -1 \in \{-5, \ldots, 0\}$. For $(B, C)$:
+$\Delta = 0$, $d = 0$, first branch with $0$. Part (iii): $p_{CB} = 3$,
+witness path $C \to A \to B$ with edge proofs $d_{CA} - p_{CB} = 0$ and
+$d_{AB} - p_{CB} = 0$; closure disjunction for $(C, B)$ through $A$:
+$p_{CB} - p_{CA} = 0 \in \{0, \ldots, 5\}$ (first branch). For $(A, C)$,
+$p_{AC} = 0$: witness path $A \to C$ with $d_{AC} - p_{AC} = 0$, and the
+disjunction through $B$: $p_{AC} - p_{AB} = -3$ (first branch fails),
+$p_{AC} - p_{BC} = 0$ (second branch holds). Part (iv) for $w = C$: $p_{CA}
+- p_{AC} = 3$ and $p_{CB} - p_{BC} = 3$. The board holds $9$ re-encryptions,
+$9$ defeats, $9$ path strengths, $27$ closure disjunctions, the edge
+proofs, and $2$ winner proofs. The certificate for $A$ fails at (iv):
+$p_{AC} - p_{CA} = -3$.}
+
+\subsection{The closure lemma}
+\begin{lemma}[\rocq{cert\_ok\_is\_closure}, \rocq{closure\_unique}, \rocq{cert\_winner}]
+Let $d \ge 0$ and let $p$ and paths satisfy (iii): (1) $d_{ij} \le p_{ij}$;
+(2) $\min(p_{ik}, p_{kj}) \le p_{ij}$ for all $i, j, k$; (3) for all $i,
+j$, a path from $i$ to $j$ of strength $\ge p_{ij}$ exists. Then $p$ is the
+strongest-path matrix of $d$. Consequently the strongest-path matrix is the
+unique such $p$, and a $w$ satisfying (iv) is a Schulze winner of $d$.
+\end{lemma}
+\begin{proof}
+Let $p^*$ be the strongest-path matrix. $p \le p^*$: by (3), $p_{ij}$ is at
+most the strength of some path, hence at most the maximum $p^*_{ij}$.
+$p^* \le p$: we show that every path $i = u_0, \ldots, u_\ell = j$ has
+strength $\le p_{ij}$, by induction on $\ell$. For $\ell = 1$ the strength
+is $d_{ij} \le p_{ij}$ by (1). For $\ell > 1$, the strength is $\min(d_{i
+u_1}, \sigma)$ where $\sigma$ is the strength of the path $u_1, \ldots, j$,
+which by induction is $\le p_{u_1 j}$; so the strength is $\le \min(p_{i
+u_1}, p_{u_1 j}) \le p_{ij}$ by (1) and (2). Uniqueness: $p^*$ is a
+function of $d$. Winner: (iv) says $p_{wj} \ge p_{jw}$ for every $j$, which
+is the definition applied to $p = p^*$.
+\end{proof}
+
+\subsection{Soundness of the certificate}
+\begin{theorem}[\rocq{verify\_tally\_sound}]
+Let $h = g^x$, $g$ of order $q$, characteristic above $2N^2 + 3N$, and let
+$\Enc(D)$ encrypt a matrix $D$ with $0 \le D_{ij} \le N$. From two
+accepting transcripts of a certificate for $w$ on $\Enc(D)$ with the same
+announcements and different challenges, $d = \mathrm{defeat}(D)$ and there
+are $p$ and paths satisfying (iii) and $w$ satisfying (iv); hence $w$ is a
+Schulze winner of $D$.
+\end{theorem}
+\begin{proof}
+Extract every proof as in Theorem~\ref{thm:b1sound}. (i) gives
+$\Enc'(D_{ij})$ decrypting to $g^{D_{ij}}$, i.e.\ the re-encryptions carry
+$D$. (ii) gives $d_{ij} \in [0, N]$ and one of the two branches. In the
+first, $K d_{ij} + \Delta \le 0$ with $\Delta \ge -N$ forces $K d_{ij} \le
+N$, so $d_{ij} = 0$ (since $K = 2N + 1 > N$), and then $\Delta \le 0$, so
+$D_{ij} \le D_{ji}$ and $\mathrm{defeat}(D)_{ij} = 0 = d_{ij}$. In the
+second, $1 \le K(d_{ij} - D_{ij}) + \Delta \le N$ with $|\Delta| \le N$
+forces $|K (d_{ij} - D_{ij})| \le 2N < K$, so $d_{ij} = D_{ij}$, and then
+$\Delta \ge 1$, so $D_{ij} > D_{ji}$ and $\mathrm{defeat}(D)_{ij} = D_{ij}
+= d_{ij}$. The integers compared here have absolute value at most $K N + N
+= 2N^2 + 2N$, which the characteristic bound covers, and equality of
+plaintexts is read in the exponent using the order of $g$. (iii) and (iv)
+give the conditions of the lemma directly, since each is a range statement
+on a difference of extracted plaintexts. The lemma concludes.
+\end{proof}
+
+\subsection{Zero-knowledge and the end-to-end theorems}
+\begin{theorem}[\rocq{tally\_zk}]
+The distribution of the certificate over the trustees' randomness is a
+permutation of the output of a simulator that has $\Enc(D)$, $w$ and the
+challenge only.
+\end{theorem}
+Every proof of the certificate is a Chaum--Pedersen proof or an
+OR-composition of them, simulated as in Section~\ref{sec:sigma}; the
+re-encryptions are fresh ElGamal ciphertexts whose hiding is IND-CPA. So
+the public learns $w$ and nothing about $D$ beyond what $w$ implies.
+
+\begin{theorem}[\rocq{schulze\_end\_to\_end}, \rocq{schulze\_end\_to\_end2}]
+Under the hypotheses of the ballot and certificate soundness theorems,
+with $k \le N$ ballots each accompanied by its rewinding transcripts and a
+certificate accompanied by its two transcripts on the aggregate of the
+ballots: there are position vectors $s^{(1)}, \ldots, s^{(k)}$ (one per
+ballot) such that $w$ is a Schulze winner of the margins $D_{ij} = \#\{l :
+s^{(l)}_i < s^{(l)}_j\}$; and (for the batched version) this or a binding
+break of a commitment key.
+\end{theorem}
+\begin{proof}
+Ballot soundness gives the position vectors; \rocq{cdec\_aggregate} gives
+that the aggregate encrypts their margin counts, which are in $[0, k]
+\subseteq [0, N]$; certificate soundness on that $D$ gives the winner. The
+batched version uses \rocq{ballot2\_sound} and a finite choice with an
+escape clause (\rocq{fin\_choice\_or}): either some ballot's extraction
+produced a binding break, or every ballot has positions.
+\end{proof}
+
+\subsection{Several seats and cost}
+Gentoo fills seven council seats: the winner is removed and the method is
+run on the remaining candidates. The aggregate restricted to the remaining
+candidates is the aggregate of the smaller election, so seven certificates
+on the same encrypted margins, of $m, m-1, \ldots, m-6$ candidates, replace
+Gentoo's seven passes; the ballots are not touched. The certificate has
+$O(m^3)$ proofs, independent of $N$, but each range proof has $N+1$
+branches and each closure disjunction $2N + 2$, so its size is $O(m^3 N)$
+group elements and the time grows linearly in $N$. On Gentoo's elections
+(10--17 candidates, 50--110 voters) the trustees' prover takes from $18$
+minutes ($m = 10$, $N = 50$) to $144$ minutes ($m = 17$, $N = 96$) of
+processor time and the verifier from $9$ to $71$ minutes, at the
+$2048$-bit parameters, single-threaded.
+
+\section{Security, in one place}\label{sec:security}
+
+\paragraph{Verifiability} Ballot verification, aggregation and certificate
+verification take only the board and no key. A ballot that fails is posted
+as rejected, and the verdict is recomputable. The development packages the
+count as an inductive judgement \rocq{count} with rules for a valid ballot,
+an invalid ballot and the final certificate, and proves that a derivation
+ending in a true verdict, with the rewinding transcripts, names a Schulze
+winner of the rankings cast (\rocq{count\_sound}).
+
+\paragraph{Soundness, where the trust lies} The two theorems that decide
+the result, ballot soundness and certificate soundness, are about the
+extracted verifier. What is \emph{not} covered by a theorem is the wiring
+around it: the decoder must check that every group element has order $q$
+and every field element is reduced; the verifier must derive the $\delta$
+ciphertexts (first ballot) and the challenges $\beta, \gamma, y$ (batched
+ballot) itself and never accept them as inputs; and the Fiat--Shamir hash
+must bind the voter's credential. The Gentoo driver tests the last by
+replaying a ballot under another credential.
+
+\paragraph{Privacy} Ballots are IND-CPA ciphertexts (and perfectly hiding
+commitments) with perfectly simulatable proofs; the aggregate is never
+decrypted on the board; the certificate is simulatable from $\Enc(D)$ and
+$w$. So the public learns $w$, under DDH and an honest threshold of
+trustees. The trustees learn $D$ and nothing else: this is \emph{public}
+tally-hiding in Kryvos's sense, not full tally-hiding.
+
+\paragraph{Receipt-freeness} The coercer sees the board. Replace the
+coerced voter's ranking by any other: the voter's ciphertexts and
+commitments are indistinguishable (DDH, perfect hiding), the proofs are
+simulated identically, and the certificate is a function of the new
+aggregate, which the coercer cannot distinguish from the old unless the
+winner changes. So the coercer learns at most what the winner reveals, and
+the voter cannot prove a vote: every ranking is consistent with the
+voter's board entry. Excluded: a coercer who obtains the device's
+encryption randomness, which opens the ciphertexts; that is
+coercion-resistance, which needs a re-encryption step by a trusted
+authority and is compatible with the scheme.
+
+\section{A recipe for proofs from $\Sigma$-protocol building blocks}\label{sec:recipe}
+The two ballots were designed by the same sequence of steps, and the
+sequence applies to other problems. This section states it in general,
+with the Schulze ballot as the running illustration.
+
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Write the relation precisely.} Separate the public
+  statement (keys, ciphertexts, and fixed public maps such as $M$), the
+  secret witness (the ranking $s$ and the randomness), and the condition
+  that must hold (every encrypted bit equals $[s_i < s_j]$). Most design
+  mistakes start with a vague statement of what is being proved.
+
+  \item \textbf{Choose what to encrypt, what to commit, and how to encode
+  the secret.} Encrypt only what must later be decrypted or aggregated;
+  here that is only the bits $b$, because they are summed into the
+  margins. Commit to everything that only needs proving, such as $s$,
+  $\delta$, and $p$; commitments are cheaper and support vector arguments.
+  Pick an encoding that makes validity easy to state: with a position
+  vector every vector is a valid ranking, while a permutation would need a
+  shuffle proof. Much of the cost is decided here.
+
+  \item \textbf{Let the verifier derive whatever it can.} Every value the
+  verifier computes from public data through the homomorphism is a value
+  the prover cannot lie about. In the first ballot the verifier computes
+  $\Enc(\delta_{ij}) = \Enc(s_j) / \Enc(s_i)$ itself
+  (Section~\ref{sec:ballot1}); in the simplified batched ballot it forms
+  $C_0$ from the commitments and uses the derived key $\mathbf{g}'$
+  (Section~\ref{sec:ballot2s}). This anchoring is often what rules out the
+  attacks.
+
+  \item \textbf{Reduce the condition to the shapes the toolkit proves.}
+  The building blocks prove a small set of shapes, listed in
+  Table~\ref{tab:shapes}. The work is to rewrite the condition into them,
+  and four tricks do most of it: \emph{selection}, writing ``if $b$ then
+  $x$ else $y$'' as $b x + (1 - b) y$, which is how $v$ arose;
+  \emph{auxiliary witnesses for products}, committing to $p = b \circ
+  \delta$ so that everything else stays linear; \emph{ranges via bits},
+  turning non-negativity into $v = \sum_t 2^t X^{(t)}$ with each $X^{(t)}$
+  a bit vector; and \emph{shifts that merge cases into one range}, as the
+  first ballot's $t = K b + \delta$ puts both cases into one membership
+  proof.
+
+  \item \textbf{Batch when the same claim repeats.} If a claim must hold
+  for many entries, do not prove it entry by entry. A \emph{random linear
+  combination} checks one weighted sum with fresh random
+  weights~\cite{bgr98}; that is the $\beta$ link. A \emph{polynomial
+  identity} encodes $n$ relations as the coefficients of a polynomial in a
+  challenge $y$ and checks it at one point~\cite{schwartz,zippel}; that is
+  the zero argument. \emph{Vector commitments} let one group element stand
+  for a whole vector.
+
+  \item \textbf{Compose and fix the challenge order.} Conjunctions share
+  one challenge. Under Fiat--Shamir, hash everything a challenge must not
+  be chosen before: the commitments before $\beta$, $\gamma$, and $y$, and
+  the announcements before $c$ and $x$. Include the context too, such as
+  the voter's credential, which stops replays.
+
+  \item \textbf{Prove the three properties.} Completeness is algebra.
+  Special soundness extracts a witness from rewound transcripts (two for a
+  $\Sigma$-protocol, $2r + 1$ for an $r$-row zero argument), with the
+  conclusion ``a valid witness, or a binding break''. Zero-knowledge needs
+  a simulator; in this development it is proved by a bijection on the
+  randomness.
+
+  \item \textbf{Check necessity, then optimise.} For every check, find the
+  cheat that passes without it, as in Table~\ref{tab:necessary}. A check
+  with no such cheat is redundant; a cheat with no check against it is a
+  soundness bug. Then count exponentiations and transcript size, and merge
+  rows and keys where the homomorphism allows, as in
+  Section~\ref{sec:ballot2s}.
+\end{enumerate}
+
+\begin{table}[ht]
+  \centering
+  \caption{The shapes of claim that the building blocks prove.}
+  \label{tab:shapes}
+  \begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X@{}}
+    \toprule
+    shape of the claim & building block \\
+    \midrule
+    knowledge of a preimage under a linear map (``linear in the exponent'') &
+    Schnorr~\cite{schnorr}, Okamoto, and Maurer's linear-map
+    protocol~\cite{maurer} (Section~\ref{sec:linsigma}) \\
+    the same secret behind two values, including correct decryption &
+    Chaum--Pedersen~\cite{chaumpedersen} \\
+    a value is one of a small list & OR-composition~\cite{cds}
+    (Section~\ref{sec:sigma}) \\
+    several claims at once & AND: the protocols in parallel with one shared
+    challenge \\
+    a product of two secrets & a multiplication proof, or a zero argument
+    over commitments (Section~\ref{sec:zero}) \\
+    a value lies in a range & an OR over the range, or a bit decomposition
+    and bit checks \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+The same steps also explain the pitfalls this development ran into, each
+of which a reader designing a new proof should check for:
+\begin{itemize}[leftmargin=*]
+  \item \emph{Missing constraints.} Without the bit check on $b$, a tied
+  pair can carry $b = -1$ and subtract one from a margin
+  (Table~\ref{tab:necessary}). This is the classic bug of
+  under-constrained circuits.
+  \item \emph{Wrap-around in the field.} ``$\ge 0$'' means nothing modulo
+  $q$, so every integer argument needs a bound; here it is a characteristic
+  above $3 \cdot 2^L + 2$ (Theorem~\ref{thm:b2sound}).
+  \item \emph{Challenge order.} A $\beta$ known before committing lets a
+  voter commit to bits that differ from the encrypted ones.
+  \item \emph{Weak Fiat--Shamir.} Leaving the statement or the context out
+  of the hash is a known source of real attacks on voting systems.
+  \item \emph{Unchecked group membership.} The proofs assume every element
+  lies in the prime-order group, so the verifier's decoder must enforce it;
+  this is the lesson of the paper's Belenios case study.
+  \item \emph{Intuition is weakest where machine-checking helps most.} The
+  characteristic bound and the fact that no range check on $s$ is needed
+  both came out of the formal proof.
+\end{itemize}
+
+\section{Where the ideas come from}\label{sec:sources}
+The building blocks are standard. Exponential ElGamal~\cite{elgamal},
+Pedersen commitments~\cite{pedersen}, Schnorr's protocol~\cite{schnorr},
+the Chaum--Pedersen equality proof~\cite{chaumpedersen}, the
+OR-composition of Cramer, Damg{\aa}rd, and Schoenmakers~\cite{cds}, and the
+Fiat--Shamir transform~\cite{fiatshamir} are the tools of Helios-style
+e-voting, and the Schulze method is Schulze's~\cite{schulze}.
+
+The first ballot's design is new to this work: the position vector as the
+encoding of a ranking with ties, the anchoring of every pairwise bit to it
+so that the verifier derives $\Enc(\delta_{ij})$ itself, and the shift
+trick that turns the consistency disjunction into one membership proof. It
+replaces the earlier verifiable Schulze tally of Haines, Pattinson, and
+Tiwari~\cite{hpt19}, which checks ballots after a shuffle and decrypts the
+margins. The tally certificate descends from the evidence-carrying Schulze
+count of Pattinson and Tiwari~\cite{pt17}, whose certificate of the
+strongest paths is here proved over encrypted values instead of
+published.
+
+The batched ballot combines four known techniques with one new vector.
+The library already contained Bayer and Groth's zero
+argument~\cite{bayergroth}, mechanised for the Swiss Post shuffle
+verifier~\cite{swisspost}; its soundness is the polynomial identity test of
+Schwartz and Zippel~\cite{schwartz,zippel}, and its bilinear map is
+Groth's~\cite{groth09}. The link from the ciphertexts to the committed bit
+vector is Bellare, Garay, and Rabin's batch verification~\cite{bgr98}, as
+used by Terelius and Wikstr{\"o}m to tie ElGamal ciphertexts to committed
+vectors~\cite{tereliuswikstrom}. The linear argument is Maurer's
+$\Sigma$-protocol for the preimage of a linear map~\cite{maurer}, here over
+a product of group and field coordinates. The range proof by committed bits
+and a bit-ness check is the linear-size form of the range proofs of Bootle
+et al.~\cite{bootle16} and Bulletproofs~\cite{bulletproofs}, which compress
+the same statement to logarithmic size with an inner-product argument. The
+new element is the vector $v = -\delta + 2p - b$, which turns $b_{ij} = [s_i
+< s_j]$ into ``$b_{ij}$ is a bit and $v_{ij}$ is a non-negative integer'',
+so that validity becomes one linear map, one entry-wise product, and
+bit-ness. Kryvos~\cite{kryvos} also proves ballot validity over Pedersen
+vector commitments, with Groth16 instead of $\Sigma$-protocols.
+
+\section{What is machine-checked}\label{sec:mech}
+Every theorem quoted in this note is proved in the Rocq development and
+closed under the global context (no axioms, no admitted lemmas; the audit
+script \rocq{bench/assumptions.sh} prints the assumptions of each). The
+map:
+\begin{center}
+\footnotesize
+\begin{tabularx}{\textwidth}{@{}l>{\raggedright\arraybackslash}X@{}}
+  \toprule
+  statement in this note & Rocq file: theorems \\
+  \midrule
+  linear-map $\Sigma$-protocol, Section~\ref{sec:linsigma} & \rocq{Crypto/LinearSigma.v}: \rocq{lin\_completeness}, \rocq{lin\_soundness}, \rocq{lin\_shvzk} \\
+  zero argument, Section~\ref{sec:zero} & \rocq{Crypto/BayerGroth*.v}: \rocq{zero\_completeness}, \rocq{zero\_soundness}, \rocq{zero\_shvzk} \\
+  first ballot complete & \rocq{Frontend/Schulze.v}: \rocq{ballot\_valid}, \rocq{nizk\_ballot\_valid} \\
+  Theorem~\ref{thm:b1sound} & \rocq{Frontend/Schulze.v}: \rocq{ballot\_sound}; at the instance \rocq{Examples/SchulzeIns.v}: \rocq{ballot\_sound\_ins} \\
+  first ballot ZK & \rocq{Frontend/Schulze.v}: \rocq{ballot\_zk} \\
+  aggregation & \rocq{Frontend/Schulze.v}: \rocq{aggregate\_margins}, \rocq{cdec\_aggregate} \\
+  batched ballot complete & \rocq{Frontend/SchulzeBatched.v}: \rocq{ballot2\_valid}, \rocq{nizk\_ballot2\_valid} \\
+  Theorem~\ref{thm:b2sound} & \rocq{Frontend/SchulzeBatched.v}: \rocq{ballot2\_sound}, \rocq{ballot2\_sound\_bits} \\
+  batched ballot ZK & \rocq{Frontend/SchulzeBatched.v}: \rocq{ballot2\_zk} \\
+  simpler ballot complete, Section~\ref{sec:ballot2sd} & \rocq{Frontend/SchulzeSimple.v}: \rocq{com\_gd}, \rocq{ballot3\_valid}, \rocq{nizk\_ballot3\_valid} \\
+  Proposition~\ref{prop:v3sound} & \rocq{Frontend/SchulzeSimple.v}: \rocq{ballot3\_sound}, \rocq{ballot3\_sound\_bits} \\
+  simpler ballot ZK & \rocq{Frontend/SchulzeSimple.v}: \rocq{ballot3\_zk} \\
+  end to end, simpler ballot & \rocq{Backend/SchulzeSimpleTally.v}: \rocq{schulze\_end\_to\_end3} \\
+  closure lemma & \rocq{Backend/SchulzeTally.v}: \rocq{cert\_ok\_is\_closure}, \rocq{closure\_unique}, \rocq{cert\_winner} \\
+  certificate complete & \rocq{Backend/SchulzeTally.v}: \rocq{verify\_tally\_complete}, \rocq{nizk\_tally\_complete} \\
+  certificate sound & \rocq{Backend/SchulzeTally.v}: \rocq{verify\_tally\_sound} \\
+  certificate ZK & \rocq{Backend/SchulzeTally.v}: \rocq{tally\_zk} \\
+  end to end, first ballot & \rocq{Backend/SchulzeTally.v}: \rocq{schulze\_end\_to\_end}, \rocq{count\_sound} \\
+  end to end, batched ballot & \rocq{Backend/SchulzeBatchedTally.v}: \rocq{schulze\_end\_to\_end2} \\
+  side conditions at the instance & \rocq{Utility/SchnorrOrder.v}: \rocq{prime\_order}, \rocq{pow\_injective}, \rocq{natF\_injective\_below\_q} \\
+  \bottomrule
+\end{tabularx}
+\end{center}
+What is on paper: the Fiat--Shamir and forking arguments (the mechanised
+soundness statements are in the rewinding form), the IND-CPA reduction for
+privacy, and the receipt-freeness argument; threshold decryption is not
+mechanised (the development uses one trustee key). The honest trustees'
+algorithms for the closure and the witness paths are not verified and need
+not be: they check their own certificate with \rocq{cert\_ok\_b} before
+publishing, and the verifier's soundness does not depend on how the
+certificate was produced.
+
+\section{Running it}\label{sec:artefact}
+The clients, verifiers and provers are extracted from Rocq to OCaml, with
+the Fiat--Shamir hash (SHAKE-256) and the randomness supplied by the
+driver. From the repository root, with the default opam switch:
+{\small
+\begin{verbatim}
+dune build
+E=_build/default/src/Executable
+$E/Schulzecode/main.exe              # the running example, both certificates
+$E/SchulzeBenchcode/main.exe 7 100   # first ballot and certificate, m = 7, N = 100
+$E/SchulzeBenchcode/batched.exe 17 3 # batched ballot, m = 17, three iterations
+python3 bench/gentoo_leak.py --positions   # Gentoo rankings as position vectors
+V=bench/gentoo-votes/positions-council-202306.txt
+B=bench/gentoo-board/council-202306.txt
+$E/SchulzeGentoocode/encrypt.exe $V $B     # the voters: encrypt and prove
+$E/SchulzeGentoocode/main.exe $B           # verify, aggregate, certify, verify
+\end{verbatim}}
+The example program prints the board of the running example and walks the
+\rocq{count} derivation ballot by ballot, including the two rejected
+ballots of Table~\ref{tab:ballot1} and the rejected certificate for $A$.
+The Gentoo programs encrypt a council election's published rankings under
+per-voter credentials, verify every ballot, replay one under another
+credential (rejected), aggregate, decrypt the margins, certify the winner
+and verify the certificate; the winner agrees with Gentoo's on every
+election.
+
+\begin{thebibliography}{99}\small
+\bibitem{bayergroth} S.~Bayer and J.~Groth. Efficient zero-knowledge argument for correctness of a shuffle. In \emph{EUROCRYPT 2012}, LNCS 7237, pp.~263--280. Springer, 2012.
+\bibitem{bgr98} M.~Bellare, J.~A. Garay, and T.~Rabin. Fast batch verification for modular exponentiation and digital signatures. In \emph{EUROCRYPT 1998}, LNCS 1403, pp.~236--250. Springer, 1998.
+\bibitem{bootle16} J.~Bootle, A.~Cerulli, P.~Chaidos, J.~Groth, and C.~Petit. Efficient zero-knowledge arguments for arithmetic circuits in the discrete log setting. In \emph{EUROCRYPT 2016}, LNCS 9666, pp.~327--357. Springer, 2016.
+\bibitem{bulletproofs} B.~B{\"u}nz, J.~Bootle, D.~Boneh, A.~Poelstra, P.~Wuille, and G.~Maxwell. Bulletproofs: Short proofs for confidential transactions and more. In \emph{IEEE Symposium on Security and Privacy 2018}, pp.~315--334.
+\bibitem{chaumpedersen} D.~Chaum and T.~P. Pedersen. Wallet databases with observers. In \emph{CRYPTO 1992}, LNCS 740, pp.~89--105. Springer, 1993.
+\bibitem{cds} R.~Cramer, I.~Damg{\aa}rd, and B.~Schoenmakers. Proofs of partial knowledge and simplified design of witness hiding protocols. In \emph{CRYPTO 1994}, LNCS 839, pp.~174--187. Springer, 1994.
+\bibitem{elgamal} T.~ElGamal. A public key cryptosystem and a signature scheme based on discrete logarithms. \emph{IEEE Transactions on Information Theory}, 31(4):469--472, 1985.
+\bibitem{fiatshamir} A.~Fiat and A.~Shamir. How to prove yourself: practical solutions to identification and signature problems. In \emph{CRYPTO 1986}, LNCS 263, pp.~186--194. Springer, 1987.
+\bibitem{groth09} J.~Groth. Linear algebra with sub-linear zero-knowledge arguments. In \emph{CRYPTO 2009}, LNCS 5677, pp.~192--208. Springer, 2009.
+\bibitem{hpt19} T.~Haines, D.~Pattinson, and M.~Tiwari. Verifiable homomorphic tallying for the Schulze vote counting scheme. In \emph{VSTTE 2019}, pp.~36--53. Springer, 2019.
+\bibitem{kryvos} N.~Huber, R.~K{\"u}sters, T.~Krips, J.~Liedtke, J.~M{\"u}ller, D.~Rausch, P.~Reisert, and A.~Vogt. Kryvos: Publicly tally-hiding verifiable e-voting. In \emph{ACM CCS 2022}, pp.~1443--1457.
+\bibitem{maurer} U.~Maurer. Unifying zero-knowledge proofs of knowledge. In \emph{AFRICACRYPT 2009}, LNCS 5580, pp.~272--286. Springer, 2009.
+\bibitem{pt17} D.~Pattinson and M.~Tiwari. Schulze voting as evidence carrying computation. In \emph{Interactive Theorem Proving (ITP 2017)}, LNCS 10499, pp.~410--426. Springer, 2017.
+\bibitem{pedersen} T.~P. Pedersen. Non-interactive and information-theoretic secure verifiable secret sharing. In \emph{CRYPTO 1991}, LNCS 576, pp.~129--140. Springer, 1992.
+\bibitem{schnorr} C.~P. Schnorr. Efficient signature generation by smart cards. \emph{Journal of Cryptology}, 4(3):161--174, 1991.
+\bibitem{schulze} M.~Schulze. A new monotonic, clone-independent, reversal symmetric, and Condorcet-consistent single-winner election method. \emph{Social Choice and Welfare}, 36(2):267--303, 2011.
+\bibitem{schwartz} J.~T. Schwartz. Fast probabilistic algorithms for verification of polynomial identities. \emph{Journal of the ACM}, 27(4):701--717, 1980.
+\bibitem{swisspost} Swiss Post. Swiss Post Voting System: Verifier Specification, version 1.7.1. \url{https://gitlab.com/swisspost-evoting/e-voting/e-voting-documentation}, 2026.
+\bibitem{tereliuswikstrom} B.~Terelius and D.~Wikstr{\"o}m. Proofs of restricted shuffles. In \emph{AFRICACRYPT 2010}, LNCS 6055, pp.~100--113. Springer, 2010.
+\bibitem{zippel} R.~Zippel. Probabilistic algorithms for sparse polynomials. In \emph{EUROSAM 1979}, LNCS 72, pp.~216--226. Springer, 1979.
+\end{thebibliography}
+
+\end{document}

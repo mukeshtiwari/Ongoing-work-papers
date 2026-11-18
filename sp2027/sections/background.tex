@@ -45,7 +45,9 @@ $\min_t d_{u_t u_{t+1}}$. The strongest-path value $p_{ij}$ is the
 strength of the best path from $i$ to $j$. Candidate $w$ is a
 \rocq[\emph{Schulze winner}]{schulze_winner} if $p_{wj} \ge p_{jw}$ for every $j$: no candidate
 has a stronger path to $w$ than $w$ has back. At least one Schulze
-winner always exists. A Condorcet winner $w$ is the unique one: it
+winner always exists: Schulze shows that the relation $p_{ij} > p_{ji}$
+is transitive~\cite{schulze2011}, so some candidate is beaten by no one
+in this sense. A Condorcet winner $w$ is the unique one: it
 defeats every $j$, so $p_{wj} \ge d_{wj} > 0$, and nobody defeats $w$, so
 every path into $w$ ends in an edge of strength $0$ and $p_{jw} = 0$.
 
@@ -80,7 +82,10 @@ Their pairwise counts, defeats, and strongest paths are
       C & 3 & 3 & -
       \end{array}
 \]
-(rows are $i$, columns $j$). There are two defeats, $A$ over $B$ and $C$
+(rows are $i$, columns $j$). For instance, $D_{AB} = 3$ because ballots
+$1$, $4$, and $5$ rank $A$ above $B$. $D_{BC} = D_{CB} = 2$ because
+ballots $2$ and $3$ rank $B$ above $C$, ballots $4$ and $5$ rank $C$
+above $B$, and ballot $1$ ties them and counts for neither. There are two defeats, $A$ over $B$ and $C$
 over $A$, each of strength $3$; $B$ and $C$ tie $2$ to $2$. No candidate
 beats both others, so there is no Condorcet winner. $C$ has no direct
 defeat of $B$, but the path $C \to A \to B$ has weakest link $3$, so
@@ -93,7 +98,12 @@ The matrix $p$ is the \rocq[closure]{is_closure} of $d$ in the
 semiring with $\max$ as addition and $\min$ as multiplication: a path's
 strength is the $\min$ of its edges, and $p_{ij}$ is the $\max$ over
 paths. It is \rocq[computable]{minmax_closure} in $O(m^3)$ operations by Floyd--Warshall or
-Kleene iteration~\cite{10.1007/978-3-319-66107-0_26}, and is
+Kleene iteration~\cite{10.1007/978-3-319-66107-0_26}. Floyd--Warshall
+starts from $p = d$ and, for each candidate $k$ in turn, sets $p_{ij}
+\leftarrow \max(p_{ij}, \min(p_{ik}, p_{kj}))$: a path through $k$
+replaces the current best if its weaker half is stronger. In the running
+example the step $k = A$ sets $p_{CB} = \max(0, \min(d_{CA}, d_{AB})) =
+3$, and no other step changes an entry. The closure is also
 characterised by \rocq[three properties]{cert_ok} that our certificate proves over
 encrypted values (Section~\ref{sec:tally}): $p_{ij} \ge d_{ij}$; $p_{ij}
 \ge \min(p_{ik}, p_{kj})$ for every $k$; and $p_{ij}$ is the strength of
