@@ -132,6 +132,10 @@ only $D$ leaks less, but it still leaks in a small electorate.
 Following Kryvos~\cite{kryvos2022}, a system is \emph{fully}
 tally-hiding if nobody, not even the talliers, learns anything beyond the
 result. It is \emph{publicly} tally-hiding if the talliers learn the
-aggregated tally (here $D$) and the public learns only the result. The scheme of this paper is publicly tally-hiding except for one leak:
+aggregated tally (here $D$) and the public learns only the result.
+Kryvos states this \emph{public} privacy for honest talliers, and
+measures privacy against corrupted talliers (\emph{internal} privacy)
+against the full tally. The scheme of this paper is publicly tally-hiding except for one leak:
 the witness paths of its certificate, which reveal who wins some
-head-to-head contests but not by how much (Section~\ref{sec:security}).
+head-to-head contests and how some defeat strengths compare, but no
+count (Section~\ref{sec:security}).

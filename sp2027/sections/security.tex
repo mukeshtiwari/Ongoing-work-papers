@@ -1,0 +1,136 @@
+\section{Security Statements and Proof Outlines}\label{app:security}
+This appendix states the claims of Section~\ref{sec:threat} and says, for
+each, which part is a Rocq theorem and which part is an argument on
+paper. Nothing in this appendix is mechanised beyond the theorems it
+cites by name. For those, Rocq's \texttt{Print Assumptions} reports the
+soundness, zero-knowledge, and end-to-end theorems closed under the
+global context. Three completeness lemmas use functional extensionality,
+and the 2048-bit instance uses Rocq's primitive integers to check its
+primality certificates (\rocqfile{bench/assumptions.sh}).
+
+\newcounter{secclaim}
+\textbf{Model.} The group $\langle g \rangle$ has prime order $q$ and
+DDH holds in it. The hash is a random oracle with range $\mathbb{Z}_q$,
+with separate domains for the ballots of each credential, for the
+certificate, and for the commitment key. (Our driver separates ballots
+by a credential prefix and the three kinds of query by their formats
+only, and it reduces a $256$-bit hash modulo the $256$-bit $q$, which at
+worst doubles the bound below.) The election parameters ($g$,
+$h$, $m$, the commitment key) are fixed before the adversary runs. The
+board is public and append-only, and it accepts one ballot per
+credential. The trustees share $x$ with $h = g^x$ as in
+Section~\ref{sec:discussion}.
+
+\textbf{Result function.} For rankings $s_1, \ldots, s_N$ let $D$ be
+their count matrix. Let $w(D)$ be the first Schulze winner of $D$ in
+candidate order (\rocq{winner_of}) and $\Pi(D)$ the witness paths that
+\rocq{witness_path} computes, for every pair, from $D$. The result of
+the election is $\mathcal{L}(D) = (w(D), \Pi(D))$. Public privacy is
+privacy with respect to this result function, and internal privacy is
+privacy with respect to $D$ itself, as in Kryvos~\cite{kryvos2022}.
+
+\subsection{Verifiability}
+\refstepcounter{secclaim}\label{prop:verif}
+\textbf{Proposition~\thesecclaim{} (first ballot).} Let $g \ne 1$ and
+$q > \max(4m + 2,\, 2N^2 + 3N)$. Let an adversary that may control every
+voter and every trustee make at most $Q$ oracle queries and output a
+board with $N$ ballots that \rocq{nizk_verify_ballot} accepts and a
+certificate for $w$ that \rocq{nizk_verify_tally} accepts on their
+aggregate. Then, except with probability at most $(Q + N + 1)/q$, there
+are position vectors $s_1, \ldots, s_N \in [0, m]^m$ such that the bit
+ciphertexts of ballot $k$ encrypt the bits $[s_{k,i} < s_{k,j}]$, and
+$w$ is a Schulze winner of the count matrix of $s_1, \ldots, s_N$.
+
+\emph{Proof.} Call the ciphertexts of a ballot \emph{valid} if they
+encrypt the bits of some position vector in $[0,m]^m$. Validity depends
+on the ciphertexts and on $x$ only. By \rocq{ballot_sound}, if the
+ciphertexts are not valid, then for every choice of announcements at
+most one challenge has responses that the verifier accepts: two such
+challenges would give a position vector. The hypotheses of the theorem
+hold because $g \ne 1$ has order $q$ (\rocq{pow_injective}) and $q >
+4m + 2$. The non-interactive verifier accepts only if the challenge is
+the oracle's value at the credential, the ciphertexts, and the
+announcements. So a query on invalid ciphertexts returns the one
+accepting challenge with probability at most $1/q$. If all $N$ ballots
+are valid, their aggregate encrypts a count matrix $D$ with entries in
+$[0, N]$ (\rocq{cdec_aggregate}). Call the pair of the aggregate and $w$
+\emph{correct} if $w$ is a Schulze winner of $D$, again a property of
+the board and $x$ only. By \rocq{verify_tally_sound} and
+\rocq{cert_winner}, if the pair is not correct, then for every choice of
+the certificate's ciphertexts, paths, and announcements at most one
+challenge is accepted, and the verifier takes the challenge from the
+oracle at exactly these values. The adversary makes $Q$ queries and the
+verifier $N + 1$. A union bound over them gives the claim. \hfill$\Box$
+
+The proposition counts the ballots that are on the board. Who may post a
+ballot, and whether a ballot holds the ranking its voter intended, are
+outside it (Section~\ref{sec:threat}). When several candidates are
+Schulze winners, the proposition does not say which one is announced
+(Section~\ref{sec:discussion}).
+
+\textbf{Batched ballots.} The batched ballot is an argument: a
+commitment has many openings, so validity cannot be read off the first
+message, and the step to Fiat--Shamir needs an extractor that rewinds.
+\rocq{ballot3_sound} gives the tree of transcripts from which the
+extractor succeeds. At the challenge $\beta$ the tree is more specific
+than it has to be. Fix the ciphertexts $c$ and a vector $b$, and say that
+the \emph{link} holds at $\beta$ if $\prod_k c_k^{\beta_k} = (g^R,\,
+g^{\langle \beta, b \rangle} h^R)$ for some $R$. Both sides are
+homomorphic in $\beta$. So if the link holds at $\beta^{(1)}, \ldots,
+\beta^{(t)}$, it holds at every linear combination of them, and if these
+vectors span $\mathbb{Z}_q^{m^2}$, it holds at every unit vector, which
+says that $c_k$ encrypts $b_k$. The theorem's vectors, a base vector and
+its $m^2$ neighbours in one coordinate each, are one spanning family.
+Any $m^2$ linearly independent challenge vectors would do, and a set of
+vectors fails to span only if it lies in a proper subspace, which a
+uniform $\beta$ hits with probability at most $1/q$. Together with the
+thresholds at the other challenges ($m^2$ values of $y$, $L + 2$ of $z$,
+two of $c$, $2(L+3)+1$ of $x$), this is special soundness for general
+access structures, for which Attema et al.~\cite{afkr23} show that
+Fiat--Shamir keeps knowledge soundness with a loss linear in the number
+of queries. Three things remain to be done before this is a proof: to
+restate \rocq{ballot3_sound} for linearly independent vectors, to check
+the first round, which has three challenges from separate queries on the
+same input, against the hypotheses of~\cite{afkr23}, and to derive the
+bound. Until then Proposition~\ref{prop:verif} is proved for the first
+ballot only, and for the batched ballot we rely on
+\rocq{schulze_end_to_end3} in its rewinding form.
+
+\subsection{Privacy}
+\refstepcounter{secclaim}\label{prop:priv}
+\textbf{Claim~\thesecclaim{} (privacy; proof outline).} Let the
+adversary corrupt some voters and read the board. If all trustees are
+honest, its view can be simulated from the ballots it casts and
+$\mathcal{L}(D)$, where $D$ counts the honest voters' rankings and the
+rankings in the adversary's accepted ballots (public privacy). If it
+also corrupts up to $n - 1$ trustees, its view can be simulated from its
+ballots and $D$ (internal privacy).
+
+\emph{Outline.} The argument is the one for
+Helios~\cite{bpw12,bcgpw15}, in three steps. (1)~Replace the proofs of
+the honest ballots and of the certificate by simulated ones, programming
+the oracle at their announcements. \rocq{ballot_zk},
+\rocq{ballot3_zk}, and \rocq{tally_zk} say that, for every challenge,
+the simulated transcripts have exactly the distribution of the real
+ones; the only loss is the chance that a programmed point was queried
+before. This is the mechanised part. The certificate simulator takes
+the witness paths as input, which is where $\Pi(D)$ enters. (2)~Compute
+$D$ without decrypting: take the honest voters' rankings as given, and
+extract the ranking of each ballot the adversary casts from its proofs,
+which are proofs of knowledge under strong
+Fiat--Shamir~\cite{bpw12}. A copy of an honest ballot under another
+credential is rejected, because the credential is part of the hash, so
+every accepted adversarial ballot carries proofs the adversary made
+itself. (3)~Replace the ciphertexts of the honest ballots, and the fresh
+ciphertexts of the certificate, by encryptions of $0$. This is
+indistinguishable under DDH, and the Pedersen commitments of the batched
+ballot are perfectly hiding. After step~(3) the board depends on the
+honest rankings only through $w(D)$ and $\Pi(D)$. With corrupted
+trustees the adversary learns $D$ in the tally, the honest trustee's
+decryption proofs are simulated in the same way, and the board depends
+on the honest rankings only through $D$.
+
+Step~(2) is where this outline falls short of a proof. It rewinds once
+per adversarial ballot, as the Helios analyses do, and for the batched
+ballot it inherits the open step above. We have not written the
+reduction out in full, and none of steps~(2) and~(3) is mechanised.

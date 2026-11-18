@@ -1,44 +1,35 @@
 \section{Discussion}\label{sec:discussion}
 
-Some parts of the system are not mechanised.
+Some parts of the system are not mechanised, and some limits are open.
 
 \textbf{Shared key.} The mechanised tally decrypts with a single trustee
-key. A deployment shares the key. Trustee $i$ holds $x_i$ and publishes
-$h_i = g^{x_i}$ with a Schnorr proof of knowledge, which prevents a
-rogue-key attack. The election key is $h = h_1 \cdots h_n$. Ballots,
-their proofs, and aggregation use only $h$, so their theorems hold
-unchanged. Only part (i) of the certificate uses the secret key. With a
-shared key, part (i) becomes one partial decryption per trustee, each
-with a Chaum--Pedersen proof against $h_i$. The library's
-\rocq{DistElgamal} module proves that the partial decryptions combine
-correctly. Parts (ii)--(iv) need only the randomness of the fresh
-encryptions and do not change. One lemma is not yet mechanised: that $n$
-accepted partial-decryption proofs imply a correct combined decryption.
-The sharing is $n$-of-$n$: privacy needs only one honest trustee, but
-every trustee must take part in the tally. A $t$-of-$n$ sharing would
-add Shamir shares and Lagrange interpolation.
+key. A deployment shares it $n$-of-$n$: ballots, their proofs, and
+aggregation use only $h$ and do not change, and part (i) of the
+certificate becomes one partial decryption per trustee with a
+Chaum--Pedersen proof (Appendix~\ref{app:extensions}). One lemma of
+this variant is not yet mechanised.
 
 \textbf{Fiat--Shamir.} The step from the interactive proofs to
-Fiat--Shamir is on paper. The non-interactive theorems
+Fiat--Shamir is on paper (Section~\ref{sec:security},
+Appendix~\ref{app:security}). The non-interactive theorems
 (\rocq{nizk_ballot_valid}, \rocq{nizk_tally_complete}) are completeness
 statements, and soundness is stated in the rewinding form of special
 soundness. Connecting the library to a formalisation of the random
-oracle model~\cite{10.1007/11617990_3} is future work.
+oracle model~\cite{10.1007/11617990_3} is future work. The mechanised
+hash input holds the ciphertexts, commitments, witness paths, and
+announcements, but not the election parameters $g$, $h$, and the
+commitment key. Our driver prefixes each ballot query with the voter's
+credential. A deployment must also prefix an election identifier and
+these parameters, as strong Fiat--Shamir asks~\cite{bpw12}.
 
-
-\textbf{Certificate size.} Every range proof and every closure
-disjunction is a membership proof with $O(N)$ branches. So the
-certificate has $O(m^3 N)$ group elements, and the trustees' and the
-verifier's time grows linearly with the electorate
-(Section~\ref{sec:eval:tally}). The first ballot has $O(m^3)$ group
-elements for the same reason: $O(m)$ branches in each of $m^2$ cells.
-The batched ballot of Section~\ref{sec:batched} removes the branches
-and costs $O(m^2 \log m)$. The same batching would work for the
-certificate. The trustees know the openings of $d$ and $p$. So every
-range check of Section~\ref{sec:tally} can be written as a bit
-decomposition of a linear combination of committed vectors, which one
-zero argument proves, and each closure disjunction becomes a committed
-minimum with one product check. The certificate would then be $O(m^3
-\log N)$ field elements instead of $O(m^3 N)$ group elements. We have
-not implemented this.
-
+\textbf{Limits of the certificate.} The certificate has three limits.
+Appendix~\ref{app:extensions} sketches how the tools of
+Section~\ref{sec:schulze} lift each; we have implemented none of this.
+First, every range proof and closure disjunction has $O(N)$ branches, so
+the certificate has $O(m^3 N)$ group elements
+(Section~\ref{sec:eval:tally}). Bit decompositions would give $O(m^3
+\log N)$. Second, the witness paths leak (Section~\ref{sec:security}).
+Certifying the steps of Floyd--Warshall would publish no path. Third,
+with several Schulze winners the verifier accepts any of them, so
+corrupt trustees could choose among tied winners. A few more
+disjunctions would certify the first winner in candidate order.

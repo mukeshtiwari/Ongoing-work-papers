@@ -1,6 +1,23 @@
 \section{Rocq Listings}\label{appendix_listings}
-This appendix collects the Rocq listings referenced from the body. Each caption links to the file in the artefact; the definitions shown are \rocq{generalised_construct_or_conversations_schnorr}, \rocq{generalised_construct_or_conversations_simulator}, \rocq{generalised_or_schnorr_distribution}, \rocq{generalised_or_simulator_distribution}, \rocq{generalised_or_special_honest_verifier_zkp_perm}, \rocq{Schnorr_group}, \rocq{Zp}, \rocq{pow}, and \rocq{pow_vspace}.
-
+This appendix collects the Rocq listings referenced from the body. 
+Each caption links to the file in the artefact. 
+\begin{lstlisting}[frame=single, language=Coq, caption={Ballot soundness ({\rocq[\texttt{Frontend/Schulze.v}]{ballot_sound}})},
+  label={lst:ballot-sound},captionpos=t, basicstyle=\ttfamily\scriptsize,
+  abovecaptionskip=-\medskipamount]
+Theorem ballot_sound : forall (n : nat) (x : F) (g h : G)
+  (b b' : @ballot (S n)), h = g ^ x -> 
+  exp_injective g -> 
+  natF_injective (4 * S n + 2) -> 
+  same_announcements b b' -> 
+  different_challenges b b' ->
+  verify_ballot g h b = true -> 
+  verify_ballot g h b' = true ->
+  exists s : Vector.t nat (S n),
+    (forall i, Vector.nth s i <= S n) /\
+    (forall i j, plaintext_bit x b i j =
+      g ^ (if Nat.ltb (Vector.nth s i) (Vector.nth s j)
+           then one else zero)).
+\end{lstlisting}
 \begin{lstlisting}[frame=single, language=Coq, caption={The Schnorr protocol and its zero-knowledge theorem ({\rocq[\texttt{Crypto/Sigma.v}]{schnorr_protocol}})},
   label={schn_nat},captionpos=t, basicstyle=\ttfamily\scriptsize,
   abovecaptionskip=-\medskipamount]

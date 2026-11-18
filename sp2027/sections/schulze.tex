@@ -13,29 +13,39 @@ ballot, and cut its cost from $O(m^3)$ to $O(m^2 \log m)$
 exponentiations (Section~\ref{sec:batched}).
 
 \subsection{Setting and threat model}\label{sec:threat}
-An election has $m$ candidates, $N$ voters, a public bulletin board, and a set of
-trustees holding an ElGamal key $h = g^x$ over a group $\langle g\rangle$ of
-prime order $q$. Voters cast ballots from their own devices. The adversary
-reads everything on the board and may corrupt all trustees but
-one. We claim:
+An election has $m$ candidates, $N$ voters, a public bulletin board, and
+$n$ trustees who share an ElGamal key $h = g^x$ over a group $\langle
+g\rangle$ of prime order $q$. Voters cast ballots from their own devices.
+The adversary reads everything on the board. Every trustee learns $D$
+during the tally, so, following Kryvos~\cite{kryvos2022}, we state
+privacy at two levels. We claim:
 \begin{itemize}
-  \item \emph{Universal verifiability}: Anyone can redo
-  every check that decides the result from the board alone.
-  \item \emph{Ballot privacy}: The board reveals nothing about a voter's
-  ranking beyond the published result, if ElGamal is IND-CPA secure
-  (DDH) and at least one trustee is honest.
-  \item \emph{Public tally-hiding with leakage} $\mathcal{L}$ (in the
-  sense of Kryvos~\cite{kryvos2022}): The trustees learn $D$. The public
-  learns only $\mathcal{L}(D) = (w, \Pi)$: the winner $w$ and the
-  certificate's witness paths $\Pi$ (Section~\ref{sec:tally}), both
-  computed from $D$. $\Pi$ reveals who wins some head-to-head contests,
-  but no count (Section~\ref{sec:security}).
+  \item \emph{Universal verifiability}: Anyone can redo every check that
+  decides the result from the board alone, even if every trustee is
+  corrupt.
+  \item \emph{Public privacy} (public tally-hiding with leakage
+  $\mathcal{L}$): If all trustees are honest, the adversary learns only
+  $\mathcal{L}(D) = (w, \Pi)$: the winner $w$ and the certificate's
+  witness paths $\Pi$ (Section~\ref{sec:tally}), both computed from $D$.
+  $\Pi$ reveals who wins some head-to-head contests and how some defeat
+  strengths compare, but no count (Section~\ref{sec:security}).
+  \item \emph{Internal privacy} (ballot privacy relative to $D$): If the
+  adversary corrupts up to $n - 1$ trustees, it learns $D$, but nothing
+  more about any voter's ranking, if ElGamal is IND-CPA secure (DDH).
 \end{itemize}
+Appendix~\ref{app:security} states the assumptions and these claims
+precisely. Eligibility, corrupt voting devices, and receipt-freeness are
+out of scope: we assume a public, append-only board that accepts one
+ballot per credential, and a voter who reveals a ballot's randomness can
+prove how they voted. The scheme closes the coercion channel through the
+published tally, not the one through receipts.
 
 \subsection{A run, end to end}\label{sec:run}
 An election has five steps, each posted on the bulletin board.
 \begin{enumerate}
   \item \emph{Setup}: The trustees publish the election key $h = g^x$.
+  The commitment key of the batched ballot is public and needs no
+  trusted party (Section~\ref{sec:batched}).
   \item \emph{Voting}: Each voter's device encrypts the voter's ranking,
   candidate by candidate and pair by pair, and attaches non-interactive
   proofs that the ciphertexts are those of \emph{one} ranking
@@ -51,10 +61,7 @@ An election has five steps, each posted on the bulletin board.
   the counts inside $\mathrm{Enc}(D)$ (Section~\ref{sec:tally}). Anyone checks the certificate against the
   aggregate of step~4.
 \end{enumerate}
-At the end the board holds the ciphertexts, commitments, and proofs of
-every ballot, the aggregate, the
-certificate, and the winner. No ranking and no margin ever appears in
-clear. The witness paths are the only cleartext besides the winner.
+No ranking and no margin ever appears on the board in clear. The witness paths are the only cleartext besides the winner.
 
 \subsection{Ballot encoding}\label{sec:ballot}
 The Schulze method uses the ballots only through the count matrix $D$,
@@ -192,26 +199,17 @@ four conditions hold:
   \item[(V4)] $b$ and every $X^{(k)}$ are bit vectors (\emph{bit-ness}).
 \end{enumerate}
 The three tools below prove exactly these three kinds of condition.
-
-\textbf{Worked example:} Take the ballot of Table~\ref{tab:example-ballot}, $s = (0, 1, 1)$, so
-$m = 3$ and $L = 2$ (values of $v$ below $4$). Cell $(A, B)$ has $\delta
-= 1$, $b = 1$, $p = 1$, $v = -1 + 2 - 1 = 0$, bits $X = (0, 0)$. Cell
-$(B, A)$ has $\delta = -1$, $b = 0$, $p = 0$, $v = 1$, $X = (1, 0)$. The
-tie $(B, C)$ has $\delta = 0$, $b = 0$, $p = 0$, $v = 0$. In the two
-rejected ballots of the table, claiming $b_{BA} = 1$ with $\delta_{BA} =
--1$ forces $p = -1$ and $v = 1 - 2 - 1 = -2$, and claiming $b_{BC} = 1$
-with $\delta_{BC} = 0$ forces $v = -1$. Neither value is a sum of two
-bits, so no $X$ satisfies (V3) and the ballot fails. The binary form of
-$v$ replaces the $2m+1$ membership branches: a cheating voter is caught
-by an equation with no solution instead of by a disjunction with no true
-branch.
+Appendix~\ref{app:batched} works the conditions out on the ballot of
+Table~\ref{tab:example-ballot}.
 
 \textbf{Tool 1: Pedersen vector commitments.} A commitment is like a
 sealed envelope: it fixes a value now and reveals nothing until it is
 opened. A Pedersen vector commitment seals a whole vector $v \in
 \mathbb{Z}_q^n$ in one group element. Its key is a list of generators
 $h_1, g_1, \ldots, g_n$ whose discrete logarithms relative to each other
-nobody knows, and for a random $\rho$ the commitment is
+nobody knows. We derive them by hashing fixed labels into the group, so
+there is no trusted setup: in the random-oracle model, a relation between
+them gives a discrete logarithm. For a random $\rho$ the commitment is
 \rocq[$\mathrm{com}(v; \rho)$]{com} $= h_1^{\rho} \prod_j g_j^{v_j}$. It has three properties. It is \emph{hiding}: for a random $\rho$ the
 commitment is a uniformly random group element, whatever $v$ is. It is
 \emph{binding}: opening one commitment to two different vectors would
@@ -348,14 +346,10 @@ library has its \rocq[completeness]{zero_completeness}, its
 honest-verifier zero-knowledge]{zero_shvzk} (Section~\ref{schn_proof}).
 
 \textbf{The protocol, move by move} (Figure~\ref{fig:batched}). The
-voter first sends the ballot: the ciphertexts and the $L + 3$
-commitments. The verifier answers with the challenges $\beta$, $y$, and
-$z$, which fix the link of tool 3 and the weights of the zero argument.
-The voter then sends the announcements of (a) and (b), the verifier
-sends their challenges $c$ and $x$, and the voter sends the responses.
-The verifier computes $C_\beta$, $C_0$, and the weighted row commitments
-from the posted values itself, checks the five group equations of (a)
-and the zero argument (b), and accepts only if all of them hold.
+voter sends the ballot, the verifier answers with $\beta$, $y$, and
+$z$, the voter sends the announcements of (a) and (b), the verifier
+sends $c$ and $x$, and the voter sends the responses. The verifier
+computes $C_\beta$, $C_0$, and the weighted row commitments itself.
 
 \begin{figure}[t]
   \centering\footnotesize
@@ -422,9 +416,9 @@ elements, instead of five proofs tied together by hand.
 \textbf{Soundness.} The soundness theorem says that a cheating voter
 cannot get an invalid ballot accepted. Like the library's shuffle
 theorems, it is stated for a voter who answers every challenge the
-extractor asks for (the \emph{perfect-adversary} form). The forking
-argument that turns this into a probability bound is standard and is on
-paper.
+extractor asks for (the \emph{perfect-adversary} form). The step from
+this form to a probability bound under Fiat--Shamir is not mechanised
+(see below and Appendix~\ref{app:security}).
 \begin{quote}
   \emph{Theorem (\rocq{ballot3_sound}).} Let $h = g^x$, $L \ge 1$, and
   let the field have characteristic above $3 \cdot 2^L + 2$. Suppose a
@@ -458,7 +452,7 @@ relations, and the $m^2$ values of $y$ separate the $m^2$ coordinates of
 each, as in tool 2. This gives $p = b \circ \delta$ and shows that $b$
 and every $X^{(k)}$ are bit vectors, and \rocq{decode_positions} then
 reads off the positions. In all, the theorem uses $O(m^2 \log^2 m)$
-transcripts (Table~\ref{tab:twoballots}). Because the proof takes roots
+transcripts. Because the proof takes roots
 instead of comparing exponents, the batched ballot needs no assumption
 on the order of $g$, while the first ballot needs \rocq{exp_injective}.
 
@@ -493,9 +487,14 @@ challenges $\beta$, $y$, and $z$ must be hashes of the ciphertexts and
 the commitments, so that they are fixed after the ballot. Otherwise a
 voter could choose $\beta$ first and answer the link with a $b$ that is
 not the plaintext vector. The challenges $c$ and $x$ must also hash the
-respective announcements. Attema, Fehr, and Klo{\ss}~\cite{afk21} bound
-the soundness loss of Fiat--Shamir for such multi-round,
-$k$-special-sound protocols. The honest voter's announcements do not
+respective announcements. Attema, Fehr, and Kloo{\ss}~\cite{afk21}
+bound the loss of Fiat--Shamir for multi-round protocols in which any
+$k$ distinct challenges per round suffice for extraction. Our theorem
+asks for more structure at $\beta$, vectors that differ in one
+coordinate, so their bound does not apply as it stands.
+Appendix~\ref{app:security} outlines the missing step, which uses the
+generalised special soundness of~\cite{afkr23}. The honest voter's
+announcements do not
 depend on $c$ or $x$, so the voter can compute the ballot in three passes
 and gets the same challenges each time, and the honest ballot is accepted
 (\rocq{nizk_ballot3_valid}). Each coordinate of $\beta$ is a separate
@@ -507,42 +506,17 @@ $(L + 4)m^2$ exponentiations in all, and the verifier about $5m^2$. The
 ballot is $2m^2 + 3L + 17$ group elements, of which $2m^2$ are the
 ciphertexts, and $3m^2 + m + 7$ field elements. At $m = 17$ the batched ballot is $180$\,KB and takes $0.7$\,s to prove
 and $1.6$\,s to verify. The first ballot is $6.2$\,MB and takes $130$\,s
-and $68$\,s (Table~\ref{tab:ballotcost}). Of the $180$\,KB, $148$\,KB
-are ciphertexts. Table~\ref{tab:twoballots} compares the two ballots.
-Batching has a price. Soundness becomes statistical (it can fail with a
-small probability) and needs many transcripts where the first ballot
-needs two. It assumes that the commitment key is binding. Zero-knowledge
-needs the key to lie in $\langle h_1 \rangle$. And the ballot derives
-five challenges instead of one. The development and the paper therefore
-keep both ballots. The first has exact
-special soundness from two transcripts and needs no key beyond the
-election key. The second is the one to deploy. Both plug into the same
+and $68$\,s (Table~\ref{tab:ballotcost}). Of the $180$\,KB, $144$\,KB
+are ciphertexts. Batching has a price, which Table~\ref{tab:twoballots}
+(Appendix~\ref{app:batched}) lists: soundness becomes statistical and computational (it rests on the
+binding of the commitment key), it needs many transcripts where the
+first ballot needs two, and its Fiat--Shamir analysis is harder. The
+development and the paper therefore keep both ballots. The first has
+exact special soundness from two transcripts and needs no key beyond the
+election key. The second is the practical one. Both plug into the same
 aggregation and the same certificate, with end-to-end theorems
 \rocq{schulze_end_to_end} and \rocq{schulze_end_to_end3}.
 
-\begin{table}[t]
-  \caption{The two ballots for $m$ candidates, $L = \lceil \log_2 (m+1)
-  \rceil$. Measured values are in Table~\ref{tab:ballotcost}.}
-  \label{tab:twoballots}
-  \centering\scriptsize\setlength{\tabcolsep}{3pt}
-  \begin{tabularx}{\columnwidth}{@{}l>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X@{}}
-    \toprule
-     & first ballot (\S\ref{sec:ballot}) & batched ballot (\S\ref{sec:batched}) \\
-    \midrule
-    ciphertexts & $m + m^2$ & $m^2$ \\
-    commitments & --- & $L + 3$, one key of $m^2$ generators \\
-    proofs & $m$ membership, $m^2$ 0/1, $m^2$ membership & $1$ linear, $1$ zero argument of $L + 3$ rows \\
-    size & $O(m^3)$ group elements & $2m^2 + O(\log m)$ group, $3m^2 + O(m)$ field elements \\
-    prover, verifier & $O(m^3)$ exp. & $O(m^2 \log m)$, $O(m^2)$ exp. \\
-    oracle queries & $1$ & $5$ \\
-    soundness & exact, $2$ transcripts & statistical, $O(m^2 \log^2 m)$ transcripts \\
-    group hyp. & $g$ of order $q$, char.\ $> 4m+2$ & char.\ $> 3 \cdot 2^L + 2$ \\
-    key hyp. & none & binding of the commitment key \\
-    zero-knowledge & perfect, no hypothesis & perfect, key in $\langle h_1 \rangle$ \\
-    Rocq & \rocq{ballot_sound}, \rocq{ballot_zk} & \rocq{ballot3_sound}, \rocq{ballot3_zk} \\
-    \bottomrule
-  \end{tabularx}
-\end{table}
 
 \subsection{Aggregation}\label{sec:aggregation}
 To aggregate, anyone multiplies the accepted ballots' bit ciphertexts,
@@ -666,7 +640,10 @@ candidate $j$, a range proof $p_{wj} - p_{jw} \in \{0, \ldots, N\}$, that
 is, $p_{wj} \ge p_{jw}$. This is the definition of a Schulze winner
 (Section~\ref{sec:bg:schulze}). In the running example $p_{CA} - p_{AC} =
 3$ and $p_{CB} - p_{BC} = 3$. A certificate for $A$ would need $p_{AC} -
-p_{CA} = -3 \in \{0, \ldots, 5\}$, so the verifier rejects it.
+p_{CA} = -3 \in \{0, \ldots, 5\}$, so the verifier rejects it. With ties
+there can be several Schulze winners. The honest trustees announce the
+first in candidate order (\rocq{winner_of}), but the verifier accepts
+any of them (Section~\ref{sec:discussion}).
 
 \textbf{Checking the certificate.} The verifier recomputes the aggregate
 $\mathrm{Enc}(D)$ from the board and checks the proofs of (i)--(iv)
@@ -678,12 +655,9 @@ each closure disjunction $2N + 2$, so the certificate has $O(m^3 N)$
 group elements. Section~\ref{sec:eval} measures both.
 
 \textbf{Several seats.} Gentoo's council fills several seats from one
-ranked election: it removes the winner and runs the method again on the
-remaining candidates. The certificate supports this without touching the
-ballots. Restricting $\mathrm{Enc}(D)$ to the remaining candidates gives
-the aggregate of the smaller election, and the trustees certify a winner
-of it. Seven seats need seven certificates on the same encrypted counts,
-with $m, m-1, \ldots, m-6$ candidates.
+election. The trustees can certify one winner per seat on the same
+encrypted counts (Appendix~\ref{app:extensions}). We have implemented
+and measured the first seat only.
 
 \begin{table*}[t]
   \caption{The certificate of the running example ($N = 5$, winner $C$) 
@@ -719,12 +693,8 @@ with $m, m-1, \ldots, m-6$ candidates.
 
 \textbf{Running example, continued:} On the running example, the board
 shows the five ballots, the nine aggregated ciphertexts, and the
-certificate. The certificate has nine re-encryptions with
-decryption proofs, nine encrypted defeats with range proofs and defeat
-disjunctions, nine encrypted path strengths with range proofs, $27$
-closure disjunctions, the witness paths with their edge proofs, and two
-winner inequalities. Table~\ref{tab:example-cert} shows the values inside
-these proofs. The artefact's example program prints all of it. It also
+certificate, whose values Table~\ref{tab:example-cert} shows. The
+artefact's example program prints all of it. It also
 runs the certificate for $A$, which the verifier rejects. Nothing on
 the board distinguishes ballot $1$ ($A > B = C$) from ballot $5$ ($A > C >
 B$). A coercer who demanded $A > B = C$ sees two encrypted ballots with
@@ -755,9 +725,18 @@ that satisfies (iv). By the lemma of Section~\ref{sec:tally}, that winner
 is a Schulze winner. \rocq{schulze_end_to_end} combines the two: if every
 ballot and the certificate on their aggregate are accepted, the announced
 winner is a Schulze winner of the rankings the voters cast.
-\rocq{schulze_end_to_end3} does the same with batched ballots. As for the
-rest of the library, the step from the rewinding form to Fiat--Shamir is
-on paper (Section~\ref{sec:discussion}).
+\rocq{schulze_end_to_end3} does the same with batched ballots.
+
+The step from the rewinding form to Fiat--Shamir is on paper. For the
+first ballot and the certificate it needs no rewinding, because their
+statements are about ciphertexts only. Read contrapositively, the
+theorems say that a false statement has at most one accepting challenge
+for each choice of ciphertexts and announcements, and the challenge is
+the hash of exactly these. So an adversary that controls every voter and
+trustee and makes $Q$ oracle queries gets a wrong winner accepted with
+probability at most $(Q + N + 1)/q$ (Proposition~\ref{prop:verif},
+Appendix~\ref{app:security}). For the batched ballot, an argument of
+knowledge, we only outline the step (Section~\ref{sec:batched}).
 
 \textbf{Privacy.} Privacy means that the board reveals nothing about any
 voter's ranking beyond the published result. The argument has two steps.
@@ -772,28 +751,44 @@ from the proofs, they could have computed from the ciphertexts and $\Pi$
 alone. Second, the ciphertexts reveal nothing. Under DDH, ElGamal is
 IND-CPA secure: without the secret key, an encryption of one value cannot
 be told apart from an encryption of another. The key is shared among the
-trustees (Section~\ref{sec:discussion}), so it stays secret as long as
-one trustee is honest. Together the two steps give ballot privacy, and
-public tally-hiding with leakage $\Pi$. The first step is mechanised; the
-second is the standard reduction, on paper.
+$n$ trustees (Section~\ref{sec:discussion}), so it stays secret as long
+as one trustee is honest. With all trustees honest, the adversary sees
+only ciphertexts and $\Pi$, so it learns only $\mathcal{L}(D)$ (public
+privacy). With up to $n - 1$ corrupted trustees it also learns $D$, but
+nothing more, since $\Pi$ is computed from $D$ and the ballots stay
+encrypted (internal privacy). The first step is mechanised. The second
+is on paper: it is the reduction used for Helios~\cite{bpw12,bcgpw15},
+which also needs every ballot's hash to be bound to its voter's
+credential (Claim~\ref{prop:priv}, Appendix~\ref{app:security}).
 
 \textbf{What the witness paths reveal.} Beyond the winner, the public
 learns the witness paths $\Pi$, which \rocq{witness_path} computes from
-$D$, so $\mathcal{L}(D) = (w, \Pi)$. A path with one edge, $i \to j$, is
-published both when $p_{ij} = 0$ and when $d_{ij} \ge p_{ij} > 0$, so it
-does not say whether $i$ defeats $j$. A path with two or more edges
-arises only when $p_{ij} > 0$, and every edge $(u, v)$ on it has $d_{uv}
-\ge p_{ij} > 0$. So it reveals that $u$ defeats $v$, but not by how
-much. In the running example only $C \to A \to B$ has two edges, so the
-public learns that $C$ defeats $A$ and that $A$ defeats $B$, but not the
-counts $3$ to $2$ behind either defeat (Section~\ref{sec:tally}).
+$D$ by a breadth-first search, so $\mathcal{L}(D) = (w, \Pi)$. A path
+with one edge, $i \to j$, is published exactly when $p_{ij} = d_{ij}$,
+whether that value is $0$ or not. It does not say whether $i$ defeats
+$j$, only that no chain of defeats from $i$ to $j$ is stronger than
+their direct contest. A path with two or more edges is published exactly
+when $p_{ij} > d_{ij}$, and every edge $(u, v)$ on it has $d_{uv} \ge
+p_{ij} > 0$. So it reveals that $u$ defeats $v$, that each of these
+defeats is stronger than the direct contest of $i$ and $j$, and, since
+the search returns a shortest path, that no shorter chain is as strong:
+directions and order relations, but no count. In the running example
+only $C \to A \to B$ has two edges, so the public learns that $C$ defeats
+$A$ and $A$ defeats $B$, but not the counts $3$ to $2$ behind either
+defeat. In the Gentoo elections of Section~\ref{sec:eval:gentoo} the
+paths reveal the winner of $118$ of the $1{,}050$ head-to-head contests:
+none in two elections, at most $15$ of $66$
+(\rocqfile{bench/gentoo_paths.py}).
 
-\textbf{What the trustees are trusted for.} The trustees decrypt $D$, so
-they learn the counts, but they never decrypt a single ballot. They are
-trusted not to publish $D$, and at least one of them must be honest for
-ballot privacy. They are not trusted for correctness: trustees who
-announce a wrong winner cannot produce a certificate that the verifier
-accepts (\rocq{verify_tally_sound}).
+\textbf{What the trustees are trusted for.} Every trustee learns $D$,
+but no trustee decrypts a single ballot: an honest trustee helps decrypt
+only the aggregate that it recomputes from the board. Public privacy
+therefore needs every trustee to keep $D$ secret. One corrupted trustee
+can publish $D$, and the scheme then reveals what a tally that publishes
+its counts reveals (Section~\ref{sec:intro}). Internal privacy needs one
+honest trustee. Correctness needs none: trustees who announce a wrong
+winner cannot produce a certificate that the verifier accepts
+(\rocq{verify_tally_sound}).
 
 \subsection{Cost and comparison}\label{sec:comparison}
 Table~\ref{tab:comparison} compares the scheme with other verifiable
@@ -806,9 +801,22 @@ coercer check the voters of a small electorate
 (Section~\ref{sec:intro}).
 
 The MPC-based systems, the Ordinos extension and Cortier et al., hide
-more than we do: even the talliers learn only the winner. They pay for
-it in running time, hours to days for $20$ candidates
-(Section~\ref{sec:related}).
+more than we do: even the talliers learn only the winner. Cortier et
+al.\ report the trustees' wall-clock time and the transcript size, with
+three trustees of four computing threads each, and no verification
+time~\cite[Table 14]{yang2023thesis}: $8.5$ minutes and $0.3$\,GB for
+ten candidates and $64$ voters, and $8$ hours $50$ minutes and $16$\,GB
+for twenty candidates and $1024$ voters. On one thread our trustees take
+$18$ minutes for ten candidates and $50$ voters (Table~\ref{tab:gentoo}).
+Our certificate grows linearly with $N$: for twenty candidates and
+$1024$ voters it would have about $18$ million branches, about
+$10$\,GB, and, at the rates of Section~\ref{sec:eval:tally}, take the
+trustees about $41$ hours. Over the sizes they report, our trustees on
+one thread are two to five times slower than theirs on twelve, and our
+certificate is between a third and two thirds of their transcript. The
+implementations differ in more than threads: theirs works over an
+elliptic curve and ours over a 2048-bit group, and our proofs can be
+computed and checked in parallel, which we have not implemented.
 
 Kryvos is the closest to our scheme. It is publicly tally-hiding, and
 without our path leakage. But it needs a SNARK with a trusted setup, and

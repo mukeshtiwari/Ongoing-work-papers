@@ -1,4 +1,41 @@
-\section{Proof Sketches for the Batched Ballot}\label{app:batched}
+\section{The Batched Ballot: Example, Comparison, and Proof Sketches}\label{app:batched}
+\textbf{Worked example:} Take the ballot of Table~\ref{tab:example-ballot}, $s = (0, 1, 1)$, so
+$m = 3$ and $L = 2$ (values of $v$ below $4$). Cell $(A, B)$ has $\delta
+= 1$, $b = 1$, $p = 1$, $v = -1 + 2 - 1 = 0$, bits $X = (0, 0)$. Cell
+$(B, A)$ has $\delta = -1$, $b = 0$, $p = 0$, $v = 1$, $X = (1, 0)$. The
+tie $(B, C)$ has $\delta = 0$, $b = 0$, $p = 0$, $v = 0$. In the two
+rejected ballots of the table, claiming $b_{BA} = 1$ with $\delta_{BA} =
+-1$ forces $p = -1$ and $v = 1 - 2 - 1 = -2$, and claiming $b_{BC} = 1$
+with $\delta_{BC} = 0$ forces $v = -1$. Neither value is a sum of two
+bits, so no $X$ satisfies (V3) and the ballot fails. The binary form of
+$v$ replaces the $2m+1$ membership branches: a cheating voter is caught
+by an equation with no solution instead of by a disjunction with no true
+branch.
+
+\begin{table}[h]
+  \caption{The two ballots for $m$ candidates, $L = \lceil \log_2 (m+1)
+  \rceil$. Measured values are in Table~\ref{tab:ballotcost}.}
+  \label{tab:twoballots}
+  \centering\scriptsize\setlength{\tabcolsep}{3pt}
+  \begin{tabularx}{\columnwidth}{@{}l>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X@{}}
+    \toprule
+     & first ballot (\S\ref{sec:ballot}) & batched ballot (\S\ref{sec:batched}) \\
+    \midrule
+    ciphertexts & $m + m^2$ & $m^2$ \\
+    commitments & --- & $L + 3$, one key of $m^2$ generators \\
+    proofs & $m$ membership, $m^2$ 0/1, $m^2$ membership & $1$ linear, $1$ zero argument of $L + 3$ rows \\
+    size & $O(m^3)$ group elements & $2m^2 + O(\log m)$ group, $3m^2 + O(m)$ field elements \\
+    prover, verifier & $O(m^3)$ exp. & $O(m^2 \log m)$, $O(m^2)$ exp. \\
+    oracle queries & $1$ & $5$ \\
+    soundness & exact, $2$ transcripts & statistical, $O(m^2 \log^2 m)$ transcripts \\
+    group hyp. & $g$ of order $q$, char.\ $> 4m+2$ & char.\ $> 3 \cdot 2^L + 2$ \\
+    key hyp. & none & binding of the commitment key \\
+    zero-knowledge & perfect, no hypothesis & perfect, key in $\langle h_1 \rangle$ \\
+    Rocq & \rocq{ballot_sound}, \rocq{ballot_zk} & \rocq{ballot3_sound}, \rocq{ballot3_zk} \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
 \textbf{Soundness (\rocq{ballot3_sound}).} The proof runs the extractors in sequence. From two challenges of (a) at
 the base $\beta$, \rocq{lin_open3} gives a witness $w$ with $\varphi(w) =
 T$, hence $s$ with $C_\delta = \mathrm{com}(Ms; \rho_\delta)$ by

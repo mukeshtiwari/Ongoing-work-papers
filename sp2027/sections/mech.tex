@@ -6,8 +6,10 @@ method over $\mathbb{Z}$, the certificate, its prover and verifier, the
 count), \rocqfile[Utility/SchnorrOrder.v]{src/Utility/SchnorrOrder.v} (the order of elements of the
 Schnorr group) and \rocqfile[Examples/SchulzeIns.v]{src/Examples/SchulzeIns.v} (the instantiation and
 the running example). All of it is generic in the vector space of
-Section~\ref{schn_proof}, and nothing is admitted. The main theorems
-are:
+Section~\ref{schn_proof}. These files contain no admitted lemma and no
+axiom, and the soundness, zero-knowledge, and end-to-end theorems below
+are closed under the global context (Appendix~\ref{app:security}). The
+main theorems are:
 \begin{itemize}\setlength{\itemsep}{0pt}
   \item \emph{Honest ballots are accepted.} A ballot made by an honest
   voter, with positions in $[0,m]$, passes the verifier, both in the
@@ -53,22 +55,17 @@ $\Sigma$-protocol for the preimage of a linear map
 protocol comes with the usual three theorems: completeness, exact special
 soundness, and perfect zero-knowledge in the permutation form
 (\rocq{lin_completeness}, \rocq{lin_soundness}, \rocq{lin_shvzk}). For
-the batched ballot itself:
-\begin{itemize}\setlength{\itemsep}{0pt}
-  \item \emph{The derived key is correct.} Committing to $s$ under
-  $\mathbf{g}'$ gives the same group element as committing to $Ms$ under
-  $\mathbf{g}$ (\rocq{com_gd}).
-  \item \emph{Honest ballots are accepted}, interactively and with
-  Fiat--Shamir (\rocq{ballot3_valid}, \rocq{nizk_ballot3_valid}).
-  \item \emph{Soundness and zero-knowledge} are the theorems
-  \rocq{ballot3_sound} and \rocq{ballot3_zk} of Section~\ref{sec:batched}.
-  \item \emph{End to end.} Either the commitment key is broken, or the
-  certified candidate is a Schulze winner of the committed positions
-  (\rocq{schulze_end_to_end3}, in
-  \rocqfile[Backend/SchulzeSimpleTally.v]{src/Backend/SchulzeSimpleTally.v}).
-\end{itemize}
+the batched ballot itself we prove that the derived key is correct
+(\rocq{com_gd}), that honest ballots are accepted, interactively and
+with Fiat--Shamir (\rocq{ballot3_valid}, \rocq{nizk_ballot3_valid}),
+the soundness and zero-knowledge theorems of Section~\ref{sec:batched}
+(\rocq{ballot3_sound}, \rocq{ballot3_zk}), and the end-to-end theorem:
+either the commitment key is broken, or the certified candidate is a
+Schulze winner of the committed positions (\rocq{schulze_end_to_end3},
+in \rocqfile[Backend/SchulzeSimpleTally.v]{src/Backend/SchulzeSimpleTally.v}).
 
-Listing~\ref{lst:ballot-sound} shows \rocq{ballot_sound}. Whatever the
+Listing~\ref{lst:ballot-sound} (Appendix~\ref{appendix_listings}) shows
+\rocq{ballot_sound}. Whatever the
 voter's device did, the bits of an accepted ballot are the bits of one
 ranking $s$ with every $s_i \le m$. Its hypotheses are the key relation $h = g^x$, the two
 transcripts, and two side conditions that the generic development cannot
@@ -86,24 +83,6 @@ extracted plaintexts, using that decryption is a homomorphism.
 \rocq{schulze_end_to_end} combines the two theorems with
 \rocq{cdec_aggregate}, which says that the aggregate encrypts the sum of
 the ballots' bits, and with the lemma of Section~\ref{sec:tally}.
-
-\begin{lstlisting}[frame=single, language=Coq, caption={Ballot soundness ({\rocq[\texttt{Frontend/Schulze.v}]{ballot_sound}})},
-  label={lst:ballot-sound},captionpos=t, basicstyle=\ttfamily\scriptsize,
-  abovecaptionskip=-\medskipamount]
-Theorem ballot_sound : forall (n : nat) (x : F) (g h : G)
-  (b b' : @ballot (S n)), h = g ^ x -> 
-  exp_injective g -> 
-  natF_injective (4 * S n + 2) -> 
-  same_announcements b b' -> 
-  different_challenges b b' ->
-  verify_ballot g h b = true -> 
-  verify_ballot g h b' = true ->
-  exists s : Vector.t nat (S n),
-    (forall i, Vector.nth s i <= S n) /\
-    (forall i j, plaintext_bit x b i j =
-      g ^ (if Nat.ltb (Vector.nth s i) (Vector.nth s j)
-           then one else zero)).
-\end{lstlisting}
 
 For the Schnorr group, both side conditions are proved once, in
 \rocqfile[Utility/SchnorrOrder.v]{src/Utility/SchnorrOrder.v}. Every

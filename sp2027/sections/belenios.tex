@@ -23,8 +23,10 @@ the per-ballot proof and signature checks had no effect on the verdict.
 Under the universal-verifiability threat model this lets a server stuff
 or overwrite ballots while the official audit succeeds. The maintainers
 confirmed the defect, present in releases 3.1 through 3.3.0, and
-committed a fix (commit \texttt{115d0d47}, 22 October 2026, the day
-after our report). The defect is in \texttt{belenios-tool} only and does
+committed a fix on 22 October 2026, the day after our report: commit
+\texttt{115d0d47} in the \texttt{gitlab.com/vcast.vote/belenios}
+repository, and the same change as commit \texttt{c87b6818} in the
+INRIA repository (\texttt{gitlab.inria.fr/belenios/belenios}). The defect is in \texttt{belenios-tool} only and does
 not affect the Belenios web server. Second, the shuffle verifier for
 Belenios's mix-net questions, over Ed25519 (cofactor~8), applies the
 subgroup test to the proof's commitments but not to its ciphertexts. A

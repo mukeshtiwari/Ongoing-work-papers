@@ -4,10 +4,11 @@ its pairwise counts, using only $\Sigma$-protocols. Anchoring the
 pairwise bits to a position vector lets each ballot be checked on its
 own, with membership proofs. Proving that the
 strongest-path matrix is a closure turns the Schulze winner into
-$O(m^3)$ proofs over encrypted values. The only cleartext besides the
-winner is the witness paths, which reveal the direction of some defeats
-and no margin. Every proof comes from the certified library, so ballot
+$O(m^3)$ proofs over encrypted values, of size linear in the electorate.
+The only cleartext besides the winner is the witness paths, which reveal
+the direction of some defeats and no margin. Every proof comes from the certified library, so ballot
 and certificate soundness are machine-checked on top of it, and the
-extracted code certified Gentoo's winner in all thirteen council
-elections. The next steps are to batch the certificate as we batched the
-ballot, and to certify the closure without witness paths.
+extracted code certified the first-seat winner of all thirteen Gentoo
+council elections. The next steps are to make the certificate
+logarithmic in the electorate, to certify the closure without witness
+paths, and to mechanise the Fiat--Shamir step.

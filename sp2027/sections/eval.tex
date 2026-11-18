@@ -1,7 +1,8 @@
 \section{Evaluation}\label{sec:eval}
-Scripts in the artefact produce every number in this section. All
-measurements are single-threaded, on an Apple M5 Max laptop with
-48\,GB of RAM. The extracted OCaml code is compiled with OCaml 5.4.1. It
+Scripts in the artefact produce every number in this section. Every
+program is single-threaded, and we ran them on an Apple M5 Max laptop
+with 48\,GB of RAM. Sizes count $256$ bytes per group element and $32$
+per field element; KB and MB are binary ($2^{10}$ and $2^{20}$ bytes). The extracted OCaml code is compiled with OCaml 5.4.1. It
 uses \texttt{zarith} (GMP) for big-number arithmetic and SHAKE-256 from
 HACL$^*$ as the Fiat--Shamir hash.
 
@@ -39,10 +40,11 @@ and verification times of the extracted OCaml code.
 Table~\ref{tab:tallycost} gives the certificate's size and time on
 synthetic elections. The certificate grows linearly in $N$, through the
 branch counts of its membership proofs, and cubically in $m$, through the
-$m^3$ closure disjunctions (Section~\ref{sec:tally}). The measurements
-fit this: each disjunction branch costs the trustees $7$--$14$\,ms,
-including decrypting the counts by a search up to $N$, and the verifier
-$3$--$4$\,ms.
+$m^3$ closure disjunctions (Section~\ref{sec:tally}). A certificate
+with $E$ witness-path edges has $m^3(2N+2) + m^2(4N+3) + (E+m)(N+1)$
+branches, of two group and two field elements each. A branch costs the
+trustees about $8$\,ms, including decrypting the counts by a search up
+to $N$ ($18$\,ms in the last row), and the verifier about $4$\,ms.
 
 \begin{table}[t]
   \caption{Certificate size and time at the 2048-bit Helios parameters,
@@ -56,8 +58,8 @@ $3$--$4$\,ms.
     \midrule
     3 & 5 & 1{,}278 & 360\,KB & 5.2\,s & 2.6\,s \\
     3 & 20 & 4{,}338 & 1.2\,MB & 17\,s & 8.7\,s \\
-    5 & 50 & 40{,}848 & 11.5\,MB & 163\,s & 83\,s \\
-    7 & 100 & 190{,}376 & 53.6\,MB & 1{,}668\,s & 382\,s \\
+    5 & 50 & 40{,}848 & 11.2\,MB & 163\,s & 83\,s \\
+    7 & 100 & 190{,}376 & 52.3\,MB & 1{,}668\,s & 382\,s \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -83,10 +85,12 @@ takes $26$--$132$\,s and verifying $12$--$57$\,s per ballot. The batched
 ballot proves in $0.8$--$2.9$\,s and verifies in $0.5$--$1.6$\,s. The
 certificate is the same for both ballots, and with the batched ballot it
 is most of the cost: the trustees take $18$ minutes at $(m, N) = (10, 50)$ and $144$ minutes
-at $(17, 96)$, and the verifier about half of that. The elections ran
-concurrently on a shared $18$-core laptop, so the certificate times are
-wall-clock upper bounds, except for 2013, 2015, and 2023, which we re-ran
-with processor-time measurement.
+at $(17, 96)$, and the verifier about half of that. The certificates
+have between $0.13$ million branches ($70$\,MB, 2023) and $1.1$ million
+($600$\,MB, 2013). Several elections ran at the same time on the
+$18$-core laptop, so the certificate times are wall-clock upper bounds,
+except for 2013, 2015, and 2023, which we re-ran with processor-time
+measurement. We certify the first seat only (Section~\ref{sec:tally}).
 
 \begin{table}[t]
   \caption{The Gentoo council elections at the 2048-bit Helios

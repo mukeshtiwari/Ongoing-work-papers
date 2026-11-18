@@ -10,9 +10,8 @@ Lipmaa--Toft comparisons. They report $135$ minutes for five
 candidates and $9$ days $10$ hours for twenty, with the trustees on
 i5-class machines over a local network~\cite[pp.\,6, 12]{ordinosext2021}. Cortier, Gaudry, and Yang~\cite{cgy2022}
 give a toolbox over threshold ElGamal with a UC-proven conditional-gate
-primitive and support Condorcet--Schulze with ties. For $1024$ voters and three trustees on two 16-core
-EPYC processors, they report $15$ minutes for five candidates and $8$ hours $50$
-minutes with a $16$\,GB transcript for twenty~\cite[Table 14, p.\,139]{yang2023thesis}.
+primitive and support Condorcet--Schulze with ties
+(timings in Section~\ref{sec:comparison}).
 They note that their adjacency-matrix Condorcet
 variants reveal the matrix. Kryvos~\cite{kryvos2022} defines
 \emph{publicly} tally-hiding elections, where the talliers learn the tally
@@ -21,9 +20,10 @@ Pedersen vector commitments for Borda, majority judgement, instant-runoff,
 and Condorcet (the Smith set, not Schulze). A twenty-candidate Condorcet
 ballot proof takes under $40$ seconds with a $0.5$\,GB proving
 key~\cite[p.\,9]{kryvos2022}, and Condorcet is the result function on
-which their tally scales worst~\cite[p.\,8]{kryvos2022}. Our scheme is publicly tally-hiding like Kryvos, except for the leak of
-its witness paths, and it computes Schulze winners like the Ordinos
-extension and Cortier et al. (Section~\ref{sec:comparison}).
+which their tally scales worst~\cite[p.\,8]{kryvos2022}.
+PQKryvos~\cite{pqkryvos2026} instantiates the same framework with
+lattice-based commitments and hash-based proofs.
+Section~\ref{sec:comparison} compares our scheme with these systems.
 
 The batched ballot ties the $m^2$ ciphertexts to one committed vector by
 a random linear combination, the batch-verification technique of

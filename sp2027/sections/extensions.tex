@@ -1,0 +1,65 @@
+\section{Shared Key and Extensions of the Certificate}\label{app:extensions}
+\textbf{Shared key.} The mechanised tally decrypts with a single trustee
+key. A deployment shares the key. Trustee $i$ holds $x_i$ and publishes
+$h_i = g^{x_i}$ with a Schnorr proof of knowledge, which prevents a
+rogue-key attack. The election key is $h = h_1 \cdots h_n$. Ballots,
+their proofs, and aggregation use only $h$, so their theorems hold
+unchanged. Only part (i) of the certificate uses the secret key. With a
+shared key, part (i) becomes one partial decryption per trustee, each
+with a Chaum--Pedersen proof against $h_i$. The library's
+\rocq{DistElgamal} module proves that the partial decryptions combine
+correctly. Parts (ii)--(iv) need only the randomness of the fresh
+encryptions and do not change. One lemma is not yet mechanised: that $n$
+accepted partial-decryption proofs imply a correct combined decryption.
+The sharing is $n$-of-$n$: internal privacy needs only one honest
+trustee, but every trustee must take part in the tally. A $t$-of-$n$ sharing would
+add Shamir shares and Lagrange interpolation.
+
+Section~\ref{sec:discussion} names three limits of the certificate. The
+rest of this appendix sketches how each can be lifted. None of it is
+implemented or mechanised.
+
+\textbf{Size logarithmic in $N$.} Two changes would replace the factor
+$N$ by $\log N$. The first uses only proofs that the library already
+has. To show $u \ge u'$ for encrypted $u, u' \in [0, N]$, the trustees
+encrypt the bits of $u - u'$, prove each ciphertext an encryption of $0$
+or $1$, and choose the randomness so that the verifier can recombine the
+bits under encryption into $\mathrm{Enc}(u)/\mathrm{Enc}(u')$. A range
+proof then has $2\lceil \log_2 (N+1) \rceil$ branches instead of $N +
+1$. A closure disjunction ``$p_{ij} \ge p_{ik}$ or $p_{ij} \ge p_{kj}$''
+becomes an encrypted value $\mu$ with a two-branch proof that $\mu$
+equals $p_{ik}$ or $p_{kj}$, and one such range proof of $p_{ij} \ge
+\mu$. The second change is the batching of Section~\ref{sec:batched}.
+The trustees know the openings of $d$ and $p$. So every range check of
+Section~\ref{sec:tally} can be written as a bit decomposition of a linear
+combination of committed vectors, which one zero argument proves, and
+each closure disjunction becomes a committed minimum with one product
+check. The certificate would then be $O(m^3 \log N)$ field elements
+instead of $O(m^3 N)$ group elements.
+
+\textbf{No witness paths.} The certificate publishes paths because the
+lower bounds of part (iii) have many solutions, and the trustees must
+show that $p$ is the least one. They could instead certify the $m$ steps
+of Floyd--Warshall (Section~\ref{sec:bg:schulze}): publish every
+intermediate matrix $p^{(k)}$ in encrypted form, with $p^{(0)} = d$, and
+prove for every entry that $p^{(k)}_{ij} = \max(p^{(k-1)}_{ij}, \mu)$
+with $\mu = \min(p^{(k-1)}_{ik}, p^{(k-1)}_{kj})$. A maximum is a
+two-branch equality proof and two range proofs, and so is a minimum.
+This costs about $2m^3$ more ciphertexts and their proofs and shows no
+value in clear, so the public would learn the winner only.
+
+\textbf{Ties.} To certify that $w$ is the first Schulze winner in
+candidate order, the trustees would add, for every earlier candidate
+$l$, a proof that $l$ is not a winner: some $j$ has $p_{jl} > p_{lj}$.
+This is a disjunction over $j$ of membership proofs of $p_{jl} - p_{lj}
+\in \{1, \ldots, N\}$, which hides $j$.
+
+\textbf{Several seats.} Gentoo's council fills several seats from one
+ranked election: it removes the winner and runs the method again on the
+remaining candidates. The certificate supports this without touching the
+ballots. Restricting $\mathrm{Enc}(D)$ to the remaining candidates gives
+the aggregate of the smaller election, and the trustees certify a winner
+of it. Seven seats need seven certificates on the same encrypted counts,
+with $m, m-1, \ldots, m-6$ candidates, and each adds its own witness
+paths to the leakage. We have implemented and measured the first seat
+only.
