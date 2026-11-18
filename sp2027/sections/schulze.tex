@@ -29,16 +29,15 @@ privacy at two levels. We claim:
   witness paths $\Pi$ (Section~\ref{sec:tally}), both computed from $D$.
   $\Pi$ reveals who wins some head-to-head contests and how some defeat
   strengths compare, but no count (Section~\ref{sec:security}).
-  \item \emph{Internal privacy} (ballot privacy relative to $D$): If the
-  adversary corrupts up to $n - 1$ trustees, it learns $D$, but nothing
-  more about any voter's ranking, if ElGamal is IND-CPA secure (DDH).
+  \item \emph{Internal privacy} (ballot privacy relative to $D$):
+  Corrupting one trustee reveals $D$, since every trustee learns it.
+  Decrypting a ballot needs the key shares of all $n$ trustees, and an
+  honest trustee helps decrypt only the aggregate. So if at least one
+  trustee is honest, the adversary learns $D$ but nothing more about any
+  voter's ranking, if ElGamal is IND-CPA secure (DDH).
 \end{itemize}
-Appendix~\ref{app:security} states the assumptions and these claims
-precisely. Eligibility, corrupt voting devices, and receipt-freeness are
-out of scope: we assume a public, append-only board with one ballot per
-credential, and a voter who reveals a ballot's randomness can prove how
-they voted. The scheme closes the coercion channel through the published
-tally, not the one through receipts.
+
+
 
 \subsection{A run, end to end}\label{sec:run}
 An election has five steps, each posted on the bulletin board.
@@ -414,9 +413,7 @@ elements, instead of five proofs tied together by hand.
 \textbf{Soundness.} The soundness theorem says that a cheating voter
 cannot get an invalid ballot accepted. Like the library's shuffle
 theorems, it is stated for a voter who answers every challenge the
-extractor asks for (the \emph{perfect-adversary} form). The step from
-this form to a probability bound under Fiat--Shamir is not mechanised
-(see below and Appendix~\ref{app:security}).
+extractor asks for (the \emph{perfect-adversary} form). 
 \begin{quote}
   \emph{Theorem (\rocq{ballot3_sound}).} Let $h = g^x$, $L \ge 1$, and
   let the field have characteristic above $3 \cdot 2^L + 2$. Suppose a
@@ -476,44 +473,6 @@ proof uses them only to exhibit the bijection, and the simulator never
 needs them. So the proofs and the commitments reveal nothing about the
 ranking beyond what the $m^2$ ciphertexts reveal, and the
 privacy argument of Section~\ref{sec:security} applies unchanged.
-
-\textbf{Non-interactive ballot.} With Fiat--Shamir the voter computes
-every challenge as a hash. The batched ballot derives five challenges,
-$\beta$, $y$, $z$, $c$, and $x$, where the first ballot derives one
-(Figure~\ref{fig:batched}). The order matters for soundness. The
-challenges $\beta$, $y$, and $z$ must be hashes of the ciphertexts and
-the commitments, so that they are fixed after the ballot. Otherwise a
-voter could choose $\beta$ first and answer the link with a $b$ that is
-not the plaintext vector. The challenges $c$ and $x$ must also hash the
-respective announcements. Attema, Fehr, and Kloo{\ss}~\cite{afk21}
-bound the loss of Fiat--Shamir for multi-round protocols in which any
-$k$ distinct challenges per round suffice for extraction. Our theorem
-asks for more structure at $\beta$, vectors that differ in one
-coordinate, so their bound does not apply as it stands.
-Appendix~\ref{app:security} outlines the missing step, which uses the
-generalised special soundness of~\cite{afkr23}. The honest voter's
-announcements do not
-depend on $c$ or $x$, so the voter can compute the ballot in three passes
-and gets the same challenges each time, and the honest ballot is accepted
-(\rocq{nizk_ballot3_valid}). Each coordinate of $\beta$ is a separate
-tagged hash query, so $\beta$ can be as long as the ballot needs,
-whatever the output length of the hash.
-
-\textbf{Cost.} The prover computes the commitments and the two announcements, about
-$(L + 4)m^2$ exponentiations in all, and the verifier about $5m^2$. The
-ballot is $2m^2 + 3L + 17$ group elements, of which $2m^2$ are the
-ciphertexts, and $3m^2 + m + 7$ field elements. At $m = 17$ the batched ballot is $180$\,KB and takes $0.7$\,s to prove
-and $1.6$\,s to verify. The first ballot is $6.2$\,MB and takes $130$\,s
-and $68$\,s (Table~\ref{tab:ballotcost}). Of the $180$\,KB, $144$\,KB
-are ciphertexts. Batching has a price, which Table~\ref{tab:twoballots}
-(Appendix~\ref{app:batched}) lists: soundness becomes statistical and computational (it rests on the
-binding of the commitment key), it needs many transcripts where the
-first ballot needs two, and its Fiat--Shamir analysis is harder. The
-development and the paper therefore keep both ballots. The first has
-exact special soundness from two transcripts and needs no key beyond the
-election key. The second is the practical one. Both plug into the same
-aggregation and the same certificate, with end-to-end theorems
-\rocq{schulze_end_to_end} and \rocq{schulze_end_to_end3}.
 
 
 \subsection{Aggregation}\label{sec:aggregation}
@@ -729,9 +688,9 @@ a false statement has at most one accepting challenge for each choice of
 ciphertexts and announcements, and the challenge is the hash of exactly
 these. So an adversary that controls every voter and trustee and makes
 $Q$ oracle queries gets a wrong winner accepted with probability at most
-$(Q + N + 1)/q$ (Proposition~\ref{prop:verif},
-Appendix~\ref{app:security}). For the batched ballot, an argument of
-knowledge, we only outline the step (Section~\ref{sec:batched}).
+$(Q + N + 1)/q$. For the batched ballot, an argument of knowledge,
+this step is open: it needs the generalised special soundness of
+Attema et al.~\cite{afkr23}.
 
 \textbf{Privacy.} Privacy means that the board reveals nothing about any
 voter's ranking beyond the published result. The argument has two steps.
@@ -754,7 +713,7 @@ nothing more, since $\Pi$ is computed from $D$ and the ballots stay
 encrypted (internal privacy). The first step is mechanised. The second
 is on paper: it is the reduction used for Helios~\cite{bpw12,bcgpw15},
 which also needs every ballot's hash to be bound to its voter's
-credential (Claim~\ref{prop:priv}, Appendix~\ref{app:security}).
+credential.
 
 \textbf{What the witness paths reveal.} Beyond the winner, the public
 learns the witness paths $\Pi$, which \rocq{witness_path} computes from
@@ -783,56 +742,3 @@ its counts reveals (Section~\ref{sec:intro}). Internal privacy needs one
 honest trustee. Correctness needs none: trustees who announce a wrong
 winner cannot produce a certificate that the verifier accepts
 (\rocq{verify_tally_sound}).
-
-\subsection{Cost and comparison}\label{sec:comparison}
-Table~\ref{tab:comparison} compares the scheme with other verifiable
-ranked tallies.
-
-The systems that publish the counts, VSTTE'19 and VERICONDOR, are the
-cheapest: the tally is a decryption, and anyone can run the Schulze
-method on the result. But the published counts are exactly what lets a
-coercer check the voters of a small electorate
-(Section~\ref{sec:intro}).
-
-The MPC-based systems, the Ordinos extension and Cortier et al., hide
-more than we do: even the talliers learn only the winner. Cortier et
-al.\ report the trustees' wall-clock time and the transcript size, for
-three trustees of four computing threads each, and no verification
-time~\cite[Table 14]{yang2023thesis}. Table~\ref{tab:par} sets our
-trustees, with twelve worker processes, against five of their six
-sizes. Ours take between a tenth and three tenths of their time, and our
-certificate is between a third and a half of their transcript. At their
-sixth size, twenty candidates and $1024$ voters ($8$ hours $50$ minutes,
-$16$\,GB), which we did not run, our certificate would be about
-$10$\,GB and take about $2$ hours at the measured rate. The comparison
-is indicative only. The machines differ (two EPYC 7282 processors there,
-an Apple M5 Max here), their implementation works over an elliptic curve
-and ours over a 2048-bit group, and their tally hides the counts from
-the talliers. Our verifier still runs on one core.
-
-Kryvos is the closest to our scheme. It is publicly tally-hiding, and
-without our path leakage. But it needs a SNARK with a trusted setup, and
-it computes the Smith set rather than Schulze winners. Our scheme uses
-only $\Sigma$-protocols and has machine-checked soundness and
-zero-knowledge. The price is the leakage of the witness paths and a
-certificate whose size grows with $N$.
-
-\begin{table}[t]
-  \caption{Verifiable ranked tallies. ``Public'' and ``talliers'' are what
-  each party learns beyond the winner; ``paths'' are the witness paths
-  of our certificate (Section~\ref{sec:security}).}
-  \label{tab:comparison}
-  \centering\scriptsize\setlength{\tabcolsep}{2.5pt}
-  \begin{tabularx}{\columnwidth}{@{}lllll>{\raggedright\arraybackslash}X@{}}
-    \toprule
-    System & Public & Talliers & Proofs & Schulze & Machine-checked \\
-    \midrule
-    VSTTE'19~\cite{haines2019verifiable} & counts & counts & $\Sigma$ & yes & tally; crypto axiomatised \\
-    VERICONDOR~\cite{vericondor2024} & counts & --- & $\Sigma$ & on counts & no \\
-    Ordinos ext.~\cite{ordinos2020,ordinosext2021} & winner & nothing & MPC & yes & no \\
-    Cortier et al.~\cite{cgy2022,yang2023thesis} & winner & nothing & MPC & yes, ties & UC proof of CGate \\
-    Kryvos~\cite{kryvos2022} & winner & tally & SNARK & Condorcet & no \\
-    this paper & winner, paths & counts & $\Sigma$ & yes, ties & ballot and certificate soundness, ZK \\
-    \bottomrule
-  \end{tabularx}
-\end{table}

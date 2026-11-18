@@ -61,21 +61,18 @@ certificates; we did not run it on the other two.
 
 \begin{table}[t]
   \caption{Trustees' wall-clock time and certificate size with twelve
-  worker processes (\rocqfile[bench/schulze\_par.sh]{bench/schulze_par.sh}),
-  against Cortier et al.~\cite[Table 14]{yang2023thesis}. Machines and
-  groups differ (Section~\ref{sec:comparison}).}
+  worker processes (\rocqfile[bench/schulze\_par.sh]{bench/schulze_par.sh}).}
   \label{tab:par}
   \centering\scriptsize\setlength{\tabcolsep}{3pt}
-  \begin{tabular}{@{}rrrrrr@{}}
+  \begin{tabular}{@{}rrrr@{}}
     \toprule
-    & & \multicolumn{2}{c}{this paper} & \multicolumn{2}{c}{Cortier et al.} \\
-    $m$ & $N$ & time & certificate & time & transcript \\
+    $m$ & $N$ & time & certificate \\
     \midrule
-    5 & 64 & 11\,s & 14\,MB & 1\,min 50\,s & 49\,MB \\
-    10 & 64 & 68\,s & 93\,MB & 8\,min 30\,s & 0.30\,GB \\
-    20 & 64 & 8.0\,min & 0.65\,GB & 45\,min & 1.8\,GB \\
-    5 & 1024 & 2.8\,min & 0.21\,GB & 15\,min & 0.60\,GB \\
-    10 & 1024 & 18.9\,min & 1.42\,GB & 65\,min & 3.1\,GB \\
+    5 & 64 & 11\,s & 14\,MB \\
+    10 & 64 & 68\,s & 93\,MB \\
+    20 & 64 & 8.0\,min & 0.65\,GB \\
+    5 & 1024 & 2.8\,min & 0.21\,GB \\
+    10 & 1024 & 18.9\,min & 1.42\,GB \\
     \bottomrule
   \end{tabular}
 \end{table}

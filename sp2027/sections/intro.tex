@@ -2,9 +2,7 @@
 In a ranked-choice election with $m$ candidates there are $m!$ possible
 rankings, and more if ties are allowed. With a few hundred voters, a
 published ballot is therefore often unique, and a unique ballot
-identifies its voter. In the thirteen Gentoo council elections of
-Section~\ref{sec:eval:gentoo}, $1{,}029$ of the $1{,}033$ published
-ballots are rankings that no other voter cast. A coercer uses this in the \emph{Italian attack}:
+identifies its voter. A coercer uses this in the \emph{Italian attack}:
 they tell a voter to cast one unusual ranking and then look for it on the
 board. Publishing the pairwise counts instead of the ballots does not
 stop the leak. In India, the votes of every polling station are counted
@@ -17,13 +15,12 @@ stations in a totaliser before counting, so that no station-level pattern
 shows~\cite{lawcom255}. The recommendation is before the Supreme Court of
 India at the time of writing~\cite{totaliser2026}. The finer the
 published result, the more exactly a coercer can check how a group of
-voters behaved. The pairwise counts of a small ranked election are fine
-enough to check a single voter.
+voters behaved.
 Every verifiable Schulze tally published so far reveals one or the other:
 the shuffled ballots~\cite{haines2019verifiable} or the aggregate
 matrix~\cite{vericondor2024}. The tally-hiding systems that reveal neither
-use multi-party computation over threshold encryption, which takes hours
-to days for twenty candidates~\cite{ordinosext2021,cgy2022}, or SNARKs
+use multi-party computation over threshold
+encryption~\cite{ordinosext2021,cgy2022}, or SNARKs
 with a trusted setup~\cite{kryvos2022}.
 
 We present a verifiable Schulze election that publishes neither the
@@ -36,9 +33,10 @@ pairwise counts are added up under encryption and never decrypted on the
 board. The trustees then prove the winner correct with a zero-knowledge
 certificate, which shows that the strongest-path matrix is the closure
 of the defeat matrix (Section~\ref{sec:bg:schulze}). The certificate has
-$O(m^3)$ proofs, a number that does not depend on the electorate, but
-each proof has $O(N)$ branches for $N$ voters, so the certificate grows
-linearly with the electorate. In the
+about $m^3$ proofs, however many people vote. But each proof hides a
+count between $0$ and $N$ by listing every possible value as a branch,
+so its size grows with $N$, and the certificate grows linearly with the
+number of voters. In the
 terminology of Kryvos~\cite{kryvos2022} the scheme is \emph{publicly}
 tally-hiding: the trustees learn the pairwise counts, and, as long as
 they keep them secret, the public learns the winner and the
@@ -68,11 +66,7 @@ containing an invalid ballot (Section~\ref{sec:eval:oracle}).
   (verification $71$ minutes). A prover that runs the same
   extracted proof functions in twelve processes certifies ten candidates
   and $64$ voters in $68$ seconds, and ten candidates and $1024$ voters
-  in $19$ minutes. The MPC-based tally-hiding Schulze of Cortier et al.,
-  which hides the counts from the talliers too, reports $8.5$ and $65$
-  minutes at these sizes, on twelve threads of other
-  hardware~\cite{cgy2022,yang2023thesis}, and transcripts more than
-  twice the size of our certificates (Section~\ref{sec:comparison}).
+  in $19$ minutes.
   \item \textbf{Machine-checked ballot and certificate soundness}
   (Section~\ref{sec:mech}). We prove in Rocq that an accepted ballot
   encrypts a single ranking (\rocq{ballot_sound}), and that an accepted

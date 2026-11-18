@@ -51,7 +51,7 @@
 In a ranked-choice election with $m$ candidates there are $m!$ possible
 rankings, so a published ballot is often unique and identifies its voter
 (the \emph{Italian attack}). In a small electorate, published pairwise
-counts identify ballots too. Verifiable tallies for the Schulze method
+counts can still reveal how voters voted. Verifiable tallies for the Schulze method
 publish one or the other. The tally-hiding systems that publish neither
 rely on multi-party computation or on SNARKs with a trusted setup.
 
@@ -61,13 +61,12 @@ of some head-to-head defeats, but no margin. A
 ballot is a matrix of encrypted pairwise bits tied to an encrypted
 ranking, and the voter proves it well formed with membership proofs. The pairwise counts are added up under encryption and never
 decrypted on the bulletin board. The trustees prove the winner correct
-with a zero-knowledge certificate of $O(m^3)$ proofs, whose size grows
-linearly with the number of voters, so the scheme suits small
-electorates, of the order of a hundred voters. Every proof comes from a certified
+with a zero-knowledge certificate of $O(m^3)$ proofs. Every proof comes 
+from a certified
 library of $\Sigma$-protocols in the Rocq theorem prover. The library has
 machine-checked completeness, special soundness, and zero-knowledge for
 the standard protocols and their $n$-ary compositions, and is extracted
-to OCaml. We extract the client and the verifier
+to OCaml, WebAssembly, and CakeML. We extract the client and the verifier
 from these proofs and run them on the thirteen Gentoo council elections
 of 2011--2023. They certify the first-seat winner of Gentoo's count in
 every one.
@@ -113,7 +112,8 @@ for their accuracy, originality, and integrity.
 \appendices
 \input{sections/appendix}
 \input{sections/proofs}
-\input{sections/security}
+%\input{sections/security}
 \input{sections/extensions}
+\input{sections/cortier}
 
 \end{document}
