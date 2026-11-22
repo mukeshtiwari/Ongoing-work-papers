@@ -682,15 +682,6 @@ ballot and the certificate on their aggregate are accepted, the announced
 winner is a Schulze winner of the rankings the voters cast.
 \rocq{schulze_end_to_end3} does the same with batched ballots.
 
-The step from the rewinding form to Fiat--Shamir is on paper. For the
-first ballot and the certificate it needs no rewinding: by the theorems,
-a false statement has at most one accepting challenge for each choice of
-ciphertexts and announcements, and the challenge is the hash of exactly
-these. So an adversary that controls every voter and trustee and makes
-$Q$ oracle queries gets a wrong winner accepted with probability at most
-$(Q + N + 1)/q$. For the batched ballot, an argument of knowledge,
-this step is open: it needs the generalised special soundness of
-Attema et al.~\cite{afkr23}.
 
 \textbf{Privacy.} Privacy means that the board reveals nothing about any
 voter's ranking beyond the published result. The argument has two steps.
@@ -710,10 +701,7 @@ as one trustee is honest. With all trustees honest, the adversary sees
 only ciphertexts and $\Pi$, so it learns only $\mathcal{L}(D)$ (public
 privacy). With up to $n - 1$ corrupted trustees it also learns $D$, but
 nothing more, since $\Pi$ is computed from $D$ and the ballots stay
-encrypted (internal privacy). The first step is mechanised. The second
-is on paper: it is the reduction used for Helios~\cite{bpw12,bcgpw15},
-which also needs every ballot's hash to be bound to its voter's
-credential.
+encrypted (internal privacy).
 
 \textbf{What the witness paths reveal.} Beyond the winner, the public
 learns the witness paths $\Pi$, which \rocq{witness_path} computes from
@@ -728,10 +716,7 @@ defeats is stronger than the direct contest of $i$ and $j$, and, since
 the search returns a shortest path, that no shorter chain is as strong:
 directions and order relations, but no count. In the running example
 only $C \to A \to B$ has two edges, so the public learns that $C$ defeats
-$A$ and $A$ defeats $B$, but no count. In the Gentoo elections of Section~\ref{sec:eval:gentoo} the
-paths reveal the winner of $118$ of the $1{,}050$ head-to-head contests:
-none in two elections, at most $15$ of $66$
-(\rocqfile{bench/gentoo_paths.py}).
+$A$ and $A$ defeats $B$, but no count. 
 
 \textbf{What the trustees are trusted for.} Every trustee learns $D$,
 but no trustee decrypts a single ballot: an honest trustee helps decrypt

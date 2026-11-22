@@ -49,10 +49,10 @@ main theorems are:
 
 The batched ballot of Section~\ref{sec:batched} is formalised in
 \rocqfile[Frontend/SchulzeSimple.v]{src/Frontend/SchulzeSimple.v}, on top
-of the library's Bayer--Groth zero argument and a new generic
+of the library's Bayer--Groth zero argument and a generic
 $\Sigma$-protocol for the preimage of a linear map
 (\rocqfile[Crypto/LinearSigma.v]{src/Crypto/LinearSigma.v}). The new
-protocol comes with the usual three theorems: completeness, exact special
+protocol comes with the usual three theorems: completeness, special
 soundness, and perfect zero-knowledge in the permutation form
 (\rocq{lin_completeness}, \rocq{lin_soundness}, \rocq{lin_shvzk}). For
 the batched ballot itself we prove that the derived key is correct
@@ -104,9 +104,8 @@ The ballot simulator computes the $\delta$ ciphertexts from the position
 ciphertexts, as the verifier does.
 
 The count is defined by rules (an inductive judgement), in the style of
-the evidence-carrying counters of~\cite{10.1007/978-3-319-66107-0_26}
-and of the \texttt{ECount} judgement of Haines et
-al.~\cite{haines2019verifiable}. The judgement
+the evidence-carrying counters of~\cite{10.1007/978-3-319-66107-0_26,haines2019verifiable}. 
+The judgement
 \rocq{count}~\texttt{:~state -> Type} has four rules: \rocq{ax} starts
 with no ballots, \rocq{cvalid} accepts a ballot, \rocq{cinvalid} rejects
 one, and \rocq{finish} checks the certificate and gives the verdict.
@@ -116,10 +115,7 @@ accepted and the rejected ones, in some order.
 so the extracted verifier returns its verdict together with the
 evidence. \rocq{count_sound} says that a derivation that ends in a true
 verdict, with rewinding transcripts, names a Schulze winner of the
-rankings cast. We do not verify the closure algorithm of the honest
-trustees. This is safe: \rocq{cert_ok_b} checks its plaintext
-certificate before publication, and \rocq{verify_tally_sound} does not
-depend on how a certificate was made.
+rankings cast. 
 
 The voter's client (\rocq{nizk_encrypt_ballot}), the verifier
 (\rocq{nizk_verify_ballot}, \rocq{compute_final_count}), and the

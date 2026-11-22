@@ -1,14 +1,5 @@
 \section{Discussion}\label{sec:discussion}
 
-Some parts of the system are not mechanised, and some limits are open.
-
-\textbf{Shared key.} The mechanised tally decrypts with a single trustee
-key. A deployment shares it $n$-of-$n$: ballots, their proofs, and
-aggregation use only $h$ and do not change, and part (i) of the
-certificate becomes one partial decryption per trustee with a
-Chaum--Pedersen proof (Appendix~\ref{app:extensions}). One lemma of
-this variant is not yet mechanised.
-
 \textbf{Fiat--Shamir.} The step from the interactive proofs to
 Fiat--Shamir is on paper (Section~\ref{sec:security}). The non-interactive theorems
 (\rocq{nizk_ballot_valid}, \rocq{nizk_tally_complete}) are completeness

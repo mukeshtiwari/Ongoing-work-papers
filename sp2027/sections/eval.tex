@@ -2,19 +2,39 @@
 Scripts in the artefact produce every number in this section. Every
 program but the parallel prover of Section~\ref{sec:eval:tally} uses
 one core, and we ran them on an Apple M5 Max laptop with 48\,GB of RAM. Sizes count $256$ bytes per group element and $32$
-per field element; KB and MB are binary ($2^{10}$ and $2^{20}$ bytes). The extracted OCaml code is compiled with OCaml 5.4.1. It
+per field element, in binary units ($1$\,KB $= 1024$ bytes). The extracted OCaml code is compiled with OCaml 5.4.1. It
 uses \texttt{zarith} (GMP) for big-number arithmetic and SHAKE-256 from
 HACL$^*$ as the Fiat--Shamir hash.
 
 
 \subsection{Ballot cost}\label{sec:eval:ballot}
-The first ballot for $m$ candidates has $m + m^2$ ciphertexts and $m +
-2m^2$ proofs (Section~\ref{sec:ballot}). In all, that is
-$2m(m+2)(2m+1)$ group elements and $m(2m+3) + m^2(4m+8)$ field elements,
-or $512\,(m+2)(2m+1)m + 32\,(4m^3 + 10m^2 + 3m)$ bytes at the 2048-bit
-Helios parameters. Table~\ref{tab:ballotcost} lists the sizes of both
-ballots for $m$ in the range of the Gentoo elections, with the proving
-and verification times of the extracted OCaml code.
+Table~\ref{tab:ballotcost} lists the size of both ballots for $m$ in
+the range of the Gentoo elections, with the proving and verification
+times of the extracted OCaml code (medians over repeated runs, one core).
+
+\textbf{First ballot.} The first ballot for $m$ candidates has $m + m^2$
+ciphertexts and $m + 2m^2$ proofs (Section~\ref{sec:ballot}). A proof
+with $k$ branches has $k$ announcements, each a pair of group elements,
+and $2k+1$ challenges and responses. Each of the $m$ position ciphertexts
+carries a proof with $m+1$ branches, and each of the $m^2$ bit
+ciphertexts a $0/1$ proof and a consistency proof with $2m+1$ branches.
+In all, that is $2m(m+2)(2m+1)$ group elements and $m(2m+3) +
+m^2(4m+8)$ field elements, or $512\,(m+2)(2m+1)m + 32\,(4m^3 + 10m^2 +
+3m)$ bytes at the 2048-bit Helios parameters. The consistency proofs
+dominate: they hold about $2m^3$ of the branches, so size and time grow
+with $m^3$. 
+
+\textbf{Batched ballot.} The batched ballot has the $m^2$ ciphertexts,
+$L + 3$ commitments, the linear proof, and the zero argument
+(Section~\ref{sec:batched}). In all, that is $2m^2 + 3L + 17$ group
+elements and $3m^2 + m + 7$ field elements, with $L = \lceil \log_2
+(m+1) \rceil$. Beyond the ciphertexts themselves, the proofs add about
+three field elements per cell and a few dozen group elements. At $m =
+17$ the ciphertexts take $145$\,KB of the ballot's $180$\,KB. Against
+the first ballot, the batched ballot is $35$ times smaller at $m = 17$,
+proves $180$ times faster, and verifies about $40$ times faster. Unlike
+the first ballot, it takes longer to verify than to prove. Even so, the
+board checks a seventeen-candidate ballot in under $2$\,s.
 
 \begin{table}[t]
   \caption{Ballot size and time at the 2048-bit Helios parameters.}
@@ -41,22 +61,20 @@ Table~\ref{tab:tallycost} (Appendix~\ref{app:onecore}) gives the
 certificate's size and time on synthetic elections with the extracted
 prover. The certificate grows linearly in $N$, through the
 branch counts of its membership proofs, and cubically in $m$, through the
-$m^3$ closure disjunctions (Section~\ref{sec:tally}). A disjunction
-branch costs the trustees about $8$\,ms, including decrypting the counts
-by a search up to $N$ ($18$\,ms in the last row), and the verifier
-about $4$\,ms.
+$m^3$ closure disjunctions (Section~\ref{sec:tally}). 
 
-The extracted prover uses one core and computes every proof twice: with
-challenge zero, to get the announcements that are hashed, and with the
-hashed challenge. A second prover,
+The extracted prover is slow for a reason unrelated to the
+cryptography: it runs on one core and computes every proof twice, once
+to get the announcements that Fiat--Shamir hashes, and again with the
+resulting challenge. A second prover,
 \rocqfile[par.exe]{src/Executable/SchulzeBenchcode/par.ml}, calls the
-same extracted functions for every proof, but from twelve worker
-processes and only once: the announcements do not depend on the
-challenge, so it patches the challenge into each proof afterwards. Its
-loop over the proofs is not verified. On small elections
-its certificate equals the extracted prover's on the same randomness.
-Table~\ref{tab:par} gives its times, about $5$\,ms of processor time
-per branch. The extracted verifier accepted the three smallest of these
+same extracted functions, but computes each proof once, on twelve
+worker processes. An announcement does not depend on the challenge, so
+it can fill in the challenge and the cheap responses afterwards. Only
+this outer loop is unverified. On small elections it produces exactly
+the extracted prover's certificate for the same randomness.
+Table~\ref{tab:par} gives its times: about $5$\,ms of processor time per
+branch. The extracted verifier accepted the three smallest of these
 certificates; we did not run it on the other two.
 
 \begin{table}[t]
@@ -99,12 +117,8 @@ takes $26$--$132$\,s and verifying $12$--$57$\,s per ballot. The batched
 ballot proves in $0.8$--$2.9$\,s and verifies in $0.5$--$1.6$\,s. The
 certificate is the same for both ballots, and with the batched ballot it
 is most of the cost: the trustees take $18$ minutes at $(m, N) = (10, 50)$ and $144$ minutes
-at $(17, 96)$, and the verifier about half of that. The certificates
-have between $0.13$ million branches ($70$\,MB, 2023) and $1.1$ million
-($600$\,MB, 2013). Several elections ran at the same time on the
-$18$-core laptop, so the certificate times are wall-clock upper bounds,
-except for 2013, 2015, and 2023, which we re-ran with processor-time
-measurement. We certify the first seat only (Section~\ref{sec:tally}).
+at $(17, 96)$, and the verifier about half of that. 
+We certify the first seat only (Section~\ref{sec:tally}).
 
 \begin{table}[t]
   \caption{The Gentoo council elections at the 2048-bit Helios

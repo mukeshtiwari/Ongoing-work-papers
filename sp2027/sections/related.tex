@@ -1,29 +1,6 @@
 \section{Related Work}\label{sec:related}
 Table~\ref{tab:comparison} compares our scheme with other verifiable
-ranked tallies.
-
-\begin{table}[t]
-  \caption{Verifiable ranked tallies. ``Public'' and ``talliers'' are what
-  each party learns beyond the winner: ``counts'' is the pairwise count
-  matrix $D$, and ``paths'' are the witness paths of our certificate
-  (Section~\ref{sec:security}).}
-  \label{tab:comparison}
-  \centering\scriptsize\setlength{\tabcolsep}{2.5pt}
-  \begin{tabularx}{\columnwidth}{@{}llll>{\raggedright\arraybackslash}X@{}}
-    \toprule
-    System & Public & Talliers & Proofs & Machine-checked \\
-    \midrule
-    VSTTE'19~\cite{haines2019verifiable} & counts & counts & $\Sigma$ & tally; crypto axiomatised \\
-    VERICONDOR~\cite{vericondor2024} & counts & --- & $\Sigma$ & no \\
-    Ordinos ext.~\cite{ordinos2020,ordinosext2021} & winner & nothing & MPC & no \\
-    Cortier et al.~\cite{cgy2022,yang2023thesis} & winner & nothing & MPC & UC proof of CGate \\
-    Kryvos~\cite{kryvos2022} & winner & counts & SNARK & no \\
-    this paper & winner, paths & counts & $\Sigma$ & ballot and certificate soundness, ZK \\
-    \bottomrule
-  \end{tabularx}
-\end{table}
-
-Ordinos~\cite{ordinos2020} introduced verifiable tally-hiding elections.
+ranked tallies. Ordinos~\cite{ordinos2020} introduced verifiable tally-hiding elections.
 It keeps the aggregated tally encrypted under threshold Paillier and
 computes the result by multi-party computation, so nobody, not even the
 talliers, learns intermediate values. Hertel et
@@ -37,8 +14,30 @@ variants reveal the matrix. Both MPC-based systems hide more than we do:
 even the talliers learn only the winner. In exchange, their talliers
 interact throughout the tally. Ours interact only to decrypt the counts,
 and anyone can check the certificate alone.
-Appendix~\ref{app:cortier} compares our running times with those
-of~\cite{cgy2022}, with the caveats this difference brings.
+Appendix~\ref{app:cortier} compares our running times with those reported
+in~\cite{cgy2022,yang2023thesis}, with the caveats this difference brings.
+
+\begin{table}[t]
+  \caption{Verifiable ranked tallies. ``Public'' and ``talliers'' are what
+  each party learns beyond the winner: ``counts'' is the pairwise count
+  matrix $D$, ``tally'' is the aggregated ballots (for Condorcet, $D$),
+  and ``paths'' are the witness paths of our certificate
+  (Section~\ref{sec:security}).}
+  \label{tab:comparison}
+  \centering\scriptsize\setlength{\tabcolsep}{2.5pt}
+  \begin{tabularx}{\columnwidth}{@{}llll>{\raggedright\arraybackslash}X@{}}
+    \toprule
+    System & Public & Talliers & Proofs & Machine-checked \\
+    \midrule
+    VSTTE'19~\cite{haines2019verifiable} & ballots, counts & ballots, counts & $\Sigma$ & tally; crypto axiomatised \\
+    VERICONDOR~\cite{vericondor2024} & counts & --- & $\Sigma$ & no \\
+    Ordinos ext.~\cite{ordinos2020,ordinosext2021} & winner & nothing & MPC & no \\
+    Cortier et al.~\cite{cgy2022,yang2023thesis} & winner & nothing & MPC & UC proof of CGate \\
+    Kryvos~\cite{kryvos2022} & winner & tally & SNARK & no \\
+    this paper & winner, paths & counts & $\Sigma$ & ballot and certificate soundness, ZK \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
 
 Kryvos~\cite{kryvos2022} defines
 \emph{publicly} tally-hiding elections, where the talliers learn the tally
@@ -46,25 +45,26 @@ and the public learns only the result. It builds them from Groth16 proofs over
 Pedersen vector commitments for Borda, majority judgement, instant-runoff,
 and Condorcet (the Smith set, not Schulze). A twenty-candidate Condorcet
 ballot proof takes under $40$ seconds with a $0.5$\,GB proving
-key~\cite[p.\,9]{kryvos2022}, and Condorcet is the result function on
-which their tally scales worst~\cite[p.\,8]{kryvos2022}.
+key. Of the voting methods Kryvos supports, Condorcet is the one whose
+tally proof grows fastest with the number of candidates.
 PQKryvos~\cite{pqkryvos2026} instantiates the same framework with
 lattice-based commitments and hash-based proofs. Kryvos is the closest
 to our scheme: it is publicly tally-hiding, and without our path
 leakage, but it needs a SNARK with a trusted setup. Our scheme uses only
 $\Sigma$-protocols and has machine-checked soundness and zero-knowledge.
-The price is the leakage of the witness paths and a certificate whose
-size grows with $N$.
+
 
 The batched ballot ties the $m^2$ ciphertexts to one committed vector by
 a random linear combination, the batch-verification technique of
-Bellare, Garay, and Rabin~\cite{bgr98}, which Bayer and
+Bellare et al.~\cite{bgr98}, which Bayer and
 Groth~\cite{10.1007/978-3-642-29011-4_17} put at the core of their shuffle
 argument. Our vector arguments need no trusted setup. Huber et al.~\cite{hklr24} show that general-purpose SNARKs can
 prove the validity of an exponential-ElGamal ballot, and Röhr et
 al.~\cite{rhk25} cut the cost of the exponentiation gadget that
-takes up most of such circuits. Both keep the per-entry re-encryption inside the
-circuit.
+takes up most of such circuits. Both still recompute the encryption of 
+every entry inside the circuit;
+our batched ballot checks one random combination of the entries
+instead.
 
 Several verifiable ranked tallies publish the pairwise counts. They are
 the cheapest, since the tally is a decryption and anyone can run the
@@ -76,8 +76,8 @@ with strict preference and indifference, and has no tallying authority
 shuffle, through a permutation proof on row sums ($O(m^2)$ for strict
 rankings, $O(m^3)$ with indifference), and it publishes the aggregate
 matrix. Its authors discuss
-the Italian attack and running Schulze on the published matrix. Haines,
-Pattinson, and Tiwari~\cite{haines2019verifiable} give a homomorphic Schulze
+the Italian attack and running Schulze on the published matrix. Haines et
+al.~\cite{haines2019verifiable} give a homomorphic Schulze
 tally, machine-checked in Coq over axiomatised primitives. It checks
 ballots by shuffling and decrypting them, and it decrypts the pairwise
 counts. Yang et
@@ -107,5 +107,4 @@ Okamoto and binary And/Or compositions in CryptHOL, with zero-knowledge as
 equality of distributions, as we do, but without executable code, $n$-ary
 compositions, or instantiation. Firsov et al.~\cite{10221929} formalise
 $\Sigma$-protocols in EasyCrypt, and Almeida et
-al.~\cite{almeida2010certifying} give a certifying compiler whose generated
-code is outside the certified boundary. 
+al.~\cite{almeida2010certifying} give a certifying compiler.
