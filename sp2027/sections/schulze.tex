@@ -8,7 +8,7 @@ encrypted counts (Section~\ref{sec:tally}). It decrypts no count. The
 public learns the winner and, from the witness paths that the
 certificate shows in clear, the direction of some head-to-head defeats,
 but no margin. Third, two \emph{vector arguments} over Pedersen
-commitments replace the $m + m^2$ disjunctive proofs of the first
+commitments replace the $m + 2m^2$ disjunctive proofs of the first
 ballot, and cut its cost from $O(m^3)$ to $O(m^2 \log m)$
 exponentiations (Section~\ref{sec:batched}).
 
@@ -161,7 +161,7 @@ This section gives a second, \emph{batched} ballot that proves a few
 statements about whole vectors at once. It has the same ciphertexts
 $\mathrm{Enc}(b_{ij})$ and the same aggregation, so the tally of
 Section~\ref{sec:tally} does not change. Only the proofs change: two
-arguments replace the $m + m^2$ disjunctions. We first rewrite ballot
+arguments replace the $m + 2m^2$ disjunctions. We first rewrite ballot
 validity as a few equations about vectors, then give three tools that
 prove such equations, and then build the ballot from them
 (Figure~\ref{fig:batched}).
@@ -696,7 +696,7 @@ from the proofs, they could have computed from the ciphertexts and $\Pi$
 alone. Second, the ciphertexts reveal nothing. Under DDH, ElGamal is
 IND-CPA secure: without the secret key, an encryption of one value cannot
 be told apart from an encryption of another. The key is shared among the
-$n$ trustees (Section~\ref{sec:discussion}), so it stays secret as long
+$n$ trustees (Appendix~\ref{app:extensions}), so it stays secret as long
 as one trustee is honest. With all trustees honest, the adversary sees
 only ciphertexts and $\Pi$, so it learns only $\mathcal{L}(D)$ (public
 privacy). With up to $n - 1$ corrupted trustees it also learns $D$, but

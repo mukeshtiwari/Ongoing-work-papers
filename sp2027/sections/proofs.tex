@@ -26,7 +26,7 @@ branch.
     proofs & $m$ membership, $m^2$ 0/1, $m^2$ membership & $1$ linear, $1$ zero argument of $L + 3$ rows \\
     size & $O(m^3)$ group elements & $2m^2 + O(\log m)$ group, $3m^2 + O(m)$ field elements \\
     prover, verifier & $O(m^3)$ exp. & $O(m^2 \log m)$, $O(m^2)$ exp. \\
-    oracle queries & $1$ & $5$ \\
+    oracle queries & $1$ & $m^2 + 4$ (5 challenges) \\
     soundness & exact, $2$ transcripts & statistical, $O(m^2 \log^2 m)$ transcripts \\
     group hyp. & $g$ of order $q$, char.\ $> 4m+2$ & char.\ $> 3 \cdot 2^L + 2$ \\
     key hyp. & none & binding of the commitment key \\

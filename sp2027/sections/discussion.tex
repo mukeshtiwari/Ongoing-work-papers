@@ -1,5 +1,12 @@
 \section{Discussion}\label{sec:discussion}
 
+\textbf{Shared key.} The mechanised tally decrypts with a single trustee
+key. A deployment shares it $n$-of-$n$ among the trustees
+(Appendix~\ref{app:extensions}). Ballots, aggregation, and parts
+(ii)--(iv) of the certificate do not change, but one lemma of the shared
+variant is not yet mechanised: that $n$ accepted partial-decryption
+proofs imply a correct combined decryption.
+
 \textbf{Fiat--Shamir.} The step from the interactive proofs to
 Fiat--Shamir is on paper (Section~\ref{sec:security}). The non-interactive theorems
 (\rocq{nizk_ballot_valid}, \rocq{nizk_tally_complete}) are completeness
