@@ -16,8 +16,8 @@ and the public learns the witness paths. The machines differ (two EPYC
 over an elliptic curve and ours over a 2048-bit group, and their
 transcript covers the whole tally while our certificate covers only the
 proof of the winner. Having said this, at the five sizes both papers
-report, our trustees take between a tenth and three tenths of their
-time, and our certificate is between a third and a half of their
+report, our trustees take between a fortieth and a tenth of their
+time, and our certificate is between a quarter and a half of their
 transcript.
 
 \begin{table}[h]
@@ -32,11 +32,11 @@ transcript.
     & & \multicolumn{2}{c}{this paper} & \multicolumn{2}{c}{Cortier et al.} \\
     $m$ & $N$ & time & certificate & time & transcript \\
     \midrule
-    5 & 64 & 11\,s & 14\,MB & 1\,min 50\,s & 49\,MB \\
-    10 & 64 & 68\,s & 93\,MB & 8\,min 30\,s & 0.30\,GB \\
-    20 & 64 & 8.0\,min & 0.65\,GB & 45\,min & 1.8\,GB \\
-    5 & 1024 & 2.8\,min & 0.21\,GB & 15\,min & 0.60\,GB \\
-    10 & 1024 & 18.9\,min & 1.42\,GB & 65\,min & 3.1\,GB \\
+    5 & 64 & 2.8\,s & 14\,MB & 1\,min 50\,s & 49\,MB \\
+    10 & 64 & 19\,s & 91\,MB & 8\,min 30\,s & 0.30\,GB \\
+    20 & 64 & 2.3\,min & 0.65\,GB & 45\,min & 1.8\,GB \\
+    5 & 1024 & 52\,s & 0.21\,GB & 15\,min & 0.60\,GB \\
+    10 & 1024 & 5.7\,min & 1.40\,GB & 65\,min & 3.1\,GB \\
     \bottomrule
   \end{tabular}
 \end{table}

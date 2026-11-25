@@ -4,7 +4,9 @@ program but the parallel prover of Section~\ref{sec:eval:tally} uses
 one core, and we ran them on an Apple M5 Max laptop with 48\,GB of RAM. Sizes count $256$ bytes per group element and $32$
 per field element, in binary units ($1$\,KB $= 1024$ bytes). The extracted OCaml code is compiled with OCaml 5.4.1. It
 uses \texttt{zarith} (GMP) for big-number arithmetic and SHAKE-256 from
-HACL$^*$ as the Fiat--Shamir hash.
+HACL$^*$ as the Fiat--Shamir hash. Appendix~\ref{app:backends} runs a
+smaller approval ballot through Peregrine (C and CakeML) and CertiRocq
+(WebAssembly).
 
 
 \subsection{Ballot cost}\label{sec:eval:ballot}
@@ -32,7 +34,7 @@ elements and $3m^2 + m + 7$ field elements, with $L = \lceil \log_2
 three field elements per cell and a few dozen group elements. At $m =
 17$ the ciphertexts take $145$\,KB of the ballot's $180$\,KB. Against
 the first ballot, the batched ballot is $35$ times smaller at $m = 17$,
-proves $180$ times faster, and verifies about $40$ times faster. Unlike
+proves $47$ times faster, and verifies about $9$ times faster. Unlike
 the first ballot, it takes longer to verify than to prove. Even so, the
 board checks a seventeen-candidate ballot in under $2$\,s.
 
@@ -46,12 +48,12 @@ board checks a seventeen-candidate ballot in under $2$\,s.
     \cmidrule(lr){2-4}\cmidrule(l){5-7}
     $m$ & size & prove & verify & size & prove & verify \\
     \midrule
-    3 & 59\,KB & 0.69\,s & 0.41\,s & 11\,KB & 0.03\,s & 0.04\,s \\
-    5 & 216\,KB & 2.9\,s & 1.6\,s & 22\,KB & 0.07\,s & 0.11\,s \\
-    7 & 531\,KB & 7.9\,s & 4.3\,s & 36\,KB & 0.12\,s & 0.20\,s \\
-    10 & 1.4\,MB & 21.9\,s & 11.9\,s & 67\,KB & 0.25\,s & 0.45\,s \\
-    13 & 2.9\,MB & 59\,s & 31\,s & 108\,KB & 0.41\,s & 0.81\,s \\
-    17 & 6.2\,MB & 130\,s & 68\,s & 180\,KB & 0.71\,s & 1.6\,s \\
+    3 & 59\,KB & 0.18\,s & 0.11\,s & 11\,KB & 0.03\,s & 0.04\,s \\
+    5 & 216\,KB & 0.76\,s & 0.44\,s & 22\,KB & 0.05\,s & 0.11\,s \\
+    7 & 531\,KB & 2.0\,s & 1.1\,s & 36\,KB & 0.10\,s & 0.20\,s \\
+    10 & 1.4\,MB & 5.6\,s & 3.0\,s & 67\,KB & 0.19\,s & 0.45\,s \\
+    13 & 2.9\,MB & 12\,s & 6.4\,s & 108\,KB & 0.32\,s & 0.80\,s \\
+    17 & 6.2\,MB & 26\,s & 14\,s & 180\,KB & 0.56\,s & 1.6\,s \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -73,9 +75,8 @@ worker processes. An announcement does not depend on the challenge, so
 it can fill in the challenge and the cheap responses afterwards. Only
 this outer loop is unverified. On small elections it produces exactly
 the extracted prover's certificate for the same randomness.
-Table~\ref{tab:par} gives its times: about $5$\,ms of processor time per
-branch. The extracted verifier accepted the three smallest of these
-certificates; we did not run it on the other two.
+Table~\ref{tab:par} gives its times: about $1.5$\,ms of processor time per
+branch. The extracted verifier accepted all five of these certificates.
 
 \begin{table}[t]
   \caption{Trustees' wall-clock time and certificate size with twelve
@@ -86,11 +87,11 @@ certificates; we did not run it on the other two.
     \toprule
     $m$ & $N$ & time & certificate \\
     \midrule
-    5 & 64 & 11\,s & 14\,MB \\
-    10 & 64 & 68\,s & 93\,MB \\
-    20 & 64 & 8.0\,min & 0.65\,GB \\
-    5 & 1024 & 2.8\,min & 0.21\,GB \\
-    10 & 1024 & 18.9\,min & 1.42\,GB \\
+    5 & 64 & 2.8\,s & 14\,MB \\
+    10 & 64 & 19\,s & 91\,MB \\
+    20 & 64 & 2.3\,min & 0.65\,GB \\
+    5 & 1024 & 52\,s & 0.21\,GB \\
+    10 & 1024 & 5.7\,min & 1.40\,GB \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -113,10 +114,10 @@ In every election every ballot is accepted, the replayed ballot is
 rejected, the certificate verifies, and the certified winner is the
 Schulze winner of the published rankings, which is Gentoo's.
 Table~\ref{tab:gentoo} gives the times. With the first ballot, proving
-takes $26$--$132$\,s and verifying $12$--$57$\,s per ballot. The batched
-ballot proves in $0.8$--$2.9$\,s and verifies in $0.5$--$1.6$\,s. The
+takes $5.6$--$27$\,s and verifying $3.0$--$14$\,s per ballot. The batched
+ballot proves in $0.6$--$2.3$\,s and verifies in $0.4$--$1.6$\,s. The
 certificate is the same for both ballots, and with the batched ballot it
-is most of the cost: the trustees take $18$ minutes at $(m, N) = (10, 50)$ and $144$ minutes
+is most of the cost: the trustees take $4.8$ minutes at $(m, N) = (10, 50)$ and $41$ minutes
 at $(17, 96)$, and the verifier about half of that. 
 We certify the first seat only (Section~\ref{sec:tally}).
 
@@ -131,19 +132,19 @@ We certify the first seat only (Section~\ref{sec:tally}).
     \cmidrule(lr){4-5}\cmidrule(lr){6-7}\cmidrule(l){8-9}
     year & $m$ & $N$ & prove & verify & prove & verify & trustees & verifier \\
     \midrule
-    2011 & 13 & 110 & 58\,s & 34\,s & 1.5\,s & 0.8\,s & 90\,min & 41\,min \\
-    2012 & 12 & 104 & 46\,s & 27\,s & 1.2\,s & 0.7\,s & 68\,min & 33\,min \\
-    2013 & 17 & 96 & 132\,s & 57\,s & 2.9\,s & 1.6\,s & 144\,min & 71\,min \\
-    2014 & 14 & 81 & 72\,s & 41\,s & 1.8\,s & 1.0\,s & 82\,min & 38\,min \\
-    2015 & 10 & 72 & 26\,s & 12\,s & 0.8\,s & 0.5\,s & 25\,min & 12\,min \\
-    2016 & 13 & 90 & 58\,s & 33\,s & 1.5\,s & 0.8\,s & 74\,min & 35\,min \\
-    2017 & 15 & 76 & 88\,s & 50\,s & 2.1\,s & 1.1\,s & 93\,min & 42\,min \\
-    2018 & 13 & 84 & 58\,s & 33\,s & 1.5\,s & 0.8\,s & 69\,min & 33\,min \\
-    2019 & 12 & 70 & 45\,s & 26\,s & 1.2\,s & 0.7\,s & 47\,min & 23\,min \\
-    2020 & 14 & 63 & 71\,s & 42\,s & 1.8\,s & 1.0\,s & 65\,min & 31\,min \\
-    2021 & 15 & 73 & 88\,s & 51\,s & 2.1\,s & 1.1\,s & 89\,min & 41\,min \\
-    2022 & 12 & 64 & 45\,s & 24\,s & 1.2\,s & 0.7\,s & 42\,min & 21\,min \\
-    2023 & 10 & 50 & 26\,s & 12\,s & 0.8\,s & 0.5\,s & 18\,min & 9\,min \\
+    2011 & 13 & 110 & 12\,s & 6.5\,s & 1.2\,s & 0.8\,s & 22\,min & 11\,min \\
+    2012 & 12 & 104 & 9.6\,s & 5.1\,s & 1.0\,s & 0.7\,s & 17\,min & 8.2\,min \\
+    2013 & 17 & 96 & 27\,s & 14\,s & 2.3\,s & 1.6\,s & 41\,min & 21\,min \\
+    2014 & 14 & 81 & 15\,s & 8.0\,s & 1.4\,s & 0.9\,s & 20\,min & 9.9\,min \\
+    2015 & 10 & 72 & 5.6\,s & 3.0\,s & 0.6\,s & 0.4\,s & 6.8\,min & 3.4\,min \\
+    2016 & 13 & 90 & 12\,s & 6.4\,s & 1.2\,s & 0.8\,s & 18\,min & 8.9\,min \\
+    2017 & 15 & 76 & 18\,s & 9.7\,s & 1.6\,s & 1.1\,s & 23\,min & 11\,min \\
+    2018 & 13 & 84 & 12\,s & 6.4\,s & 1.1\,s & 0.8\,s & 17\,min & 8.3\,min \\
+    2019 & 12 & 70 & 9.6\,s & 5.1\,s & 1.0\,s & 0.6\,s & 11\,min & 5.6\,min \\
+    2020 & 14 & 63 & 15\,s & 8.0\,s & 1.4\,s & 0.9\,s & 16\,min & 7.7\,min \\
+    2021 & 15 & 73 & 18\,s & 9.7\,s & 1.6\,s & 1.1\,s & 21\,min & 10\,min \\
+    2022 & 12 & 64 & 9.6\,s & 5.1\,s & 1.0\,s & 0.7\,s & 10\,min & 5.0\,min \\
+    2023 & 10 & 50 & 5.6\,s & 3.0\,s & 0.6\,s & 0.4\,s & 4.8\,min & 2.4\,min \\
     \bottomrule
   \end{tabular}
 \end{table}

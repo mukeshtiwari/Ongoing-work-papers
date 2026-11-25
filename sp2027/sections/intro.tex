@@ -62,11 +62,11 @@ containing an invalid ballot (Section~\ref{sec:eval:oracle}).
   by a zero-knowledge certificate of $O(m^3)$ proofs and $O(m^3 N)$
   group elements. The scheme needs no shuffle and no
   trusted setup, where Kryvos needs Groth16. On one core the extracted
-  prover certifies a $17$-candidate, $96$-voter election in $2.4$ hours
-  (verification $71$ minutes). A prover that runs the same
+  prover certifies a $17$-candidate, $96$-voter election in $41$ minutes
+  (verification $21$ minutes). A prover that runs the same
   extracted proof functions in twelve processes certifies ten candidates
-  and $64$ voters in $68$ seconds, and ten candidates and $1024$ voters
-  in $19$ minutes.
+  and $64$ voters in $19$ seconds, and ten candidates and $1024$ voters
+  in $5.7$ minutes.
   \item \textbf{Machine-checked ballot and certificate soundness}
   (Section~\ref{sec:mech}). We prove in Rocq that an accepted ballot
   encrypts a single ranking (\rocq{ballot_sound}), and that an accepted

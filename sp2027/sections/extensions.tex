@@ -81,10 +81,79 @@ two group and two field elements each.
     \toprule
     $m$ & $N$ & group el. & size & trustees & verifier \\
     \midrule
-    3 & 5 & 1{,}278 & 360\,KB & 5.2\,s & 2.6\,s \\
-    3 & 20 & 4{,}338 & 1.2\,MB & 17\,s & 8.7\,s \\
-    5 & 50 & 40{,}848 & 11.2\,MB & 163\,s & 83\,s \\
-    7 & 100 & 190{,}376 & 52.3\,MB & 1{,}668\,s & 382\,s \\
+    3 & 5 & 1{,}278 & 360\,KB & 1.3\,s & 0.68\,s \\
+    3 & 20 & 4{,}338 & 1.2\,MB & 4.6\,s & 2.3\,s \\
+    5 & 50 & 39{,}114 & 10.7\,MB & 43\,s & 21\,s \\
+    7 & 100 & 194{,}618 & 53.5\,MB & 216\,s & 107\,s \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Other Back Ends}\label{app:backends}
+The elections of Section~\ref{sec:eval} run on OCaml.
+Table~\ref{tab:backends} runs a smaller program on other back ends, not
+the Schulze ballot but an approval ballot: seven encrypted votes, each
+with a proof that it encrypts $0$ or $1$.
+Peregrine compiles the ballot to C, which we build natively with GMP and,
+with emscripten and mini-gmp, for 64-bit WebAssembly (wasm64).
+CertiRocq~\cite{anand2017certicoq} compiles it to WebAssembly through
+its verified back end~\cite{meier2025certicoq}. The last path
+translates it to CakeML, whose compiler is
+verified~\cite{10.1145/2535838.2535841}.
+
+The integer arithmetic separates the back ends. OCaml, C, and wasm64
+replace Rocq's integers by GMP or mini-gmp, and this replacement is
+trusted. With it, the C program proves and verifies a 2048-bit ballot in
+44\,ms, and the wasm64 program in $0.27$\,s. Both accept the honest
+ballot and reject one whose ciphertext components are swapped, at 2048
+bits and over Ed25519. CertiRocq-Wasm and CakeML compute on Rocq's own
+integers, binary numbers built from constructors. CertiRocq's code also has no garbage
+collector, so the 2\,GB of linear memory is its limit. At 64 bits it
+builds and accepts a ballot, and at 128 bits it builds one but runs out
+of memory verifying it. At 256 bits only a single vote completes, and at
+2048 bits not even that. CakeML has a garbage
+collector and completes the 2048-bit ballot, but in 24 minutes, against
+37\,ms for OCaml.
+
+These measurements are about performance only. The C, wasm64,
+CertiRocq-Wasm, and CakeML programs over integers modulo a prime take
+the primality of the parameters as an assumption, and the 2048-bit C and
+wasm64 programs also the membership of $g$ and $h$ in the subgroup. The OCaml and
+Ed25519 programs assume none of this.
+CertiRocq-Wasm and CakeML ran on a copy of the library for Rocq 9.1, in
+which three more proofs are admitted. The CakeML programs print
+nothing, so we checked only that they finish.
+
+\begin{table}[h]
+  \caption{Seven-candidate approval ballot on five back ends, on the
+  machine of Section~\ref{sec:eval}. Moduli in bits. Medians of five runs
+  (CakeML's ballot: one run; OCaml: random ballots, five runs of 30). C
+  and wasm64 include process start-up. Peregrine \texttt{13c701b} without
+  its LLVM back end, CertiRocq 0.9.1, CakeML v3479, emscripten 7.0.1,
+  Node 26.13.1. Memory: linear memory for CertiRocq-Wasm, peak resident
+  size otherwise (CakeML: 6000\,MB heap). OOM: out of linear memory.}
+  \label{tab:backends}
+  \centering\scriptsize\setlength{\tabcolsep}{3pt}
+  \begin{tabular}{@{}lllrr@{}}
+    \toprule
+    back end & group & computation & time & memory \\
+    \midrule
+    OCaml, GMP & 2048 & prove & 37\,ms & \\
+    & 2048 & verify & 20\,ms & \\
+    C, GMP & 2048 & prove and verify & 44\,ms & 4\,MB \\
+    & Ed25519 & prove and verify & 46\,ms & 4\,MB \\
+    wasm64, mini-gmp & 2048 & prove and verify & 0.27\,s & 54\,MB \\
+    & Ed25519 & prove and verify & 0.19\,s & 96\,MB \\
+    CertiRocq-Wasm & 64 & prove & 0.26\,s & 137\,MB \\
+    & 64 & prove and verify & 0.69\,s & 286\,MB \\
+    & 128 & prove & 6.3\,s & 1150\,MB \\
+    & 128 & prove and verify & OOM & \\
+    & 256 & one vote & 8.2\,s & 1269\,MB \\
+    & 256 & prove & OOM & \\
+    & 2048 & $g^{65537}$ & 4.0\,s & 839\,MB \\
+    & 2048 & prove & OOM & \\
+    CakeML & 2048 & $g^{65537}$ & 1.1\,s & 1683\,MB \\
+    & 2048 & prove & 24\,min & 6003\,MB \\
     \bottomrule
   \end{tabular}
 \end{table}
