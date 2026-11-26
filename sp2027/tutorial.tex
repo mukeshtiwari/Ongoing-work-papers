@@ -8,6 +8,10 @@
 \usepackage[hidelinks]{hyperref}
 \usepackage{microtype}
 \usepackage{tabularx}
+\usepackage{listings}
+\usepackage{lstcoq}
+\providecommand{\code}[1]{\texttt{#1}}
+\lstset{basicstyle=\footnotesize, xleftmargin=1em, aboveskip=6pt, belowskip=6pt}
 \setlength{\emergencystretch}{3em}
 
 \newcommand{\G}{\mathbb{G}}
@@ -65,7 +69,10 @@ recomputed with a pocket calculator. The proofs are given in full where the
 paper gives a sketch. Rocq names are in \rocq{typewriter}; every theorem
 quoted here is proved in the development and listed in its
 \rocq{THEOREMS.md}, and Section~\ref{sec:mech} maps the statements of this
-note to those names.
+note to those names. The Rocq code itself is listed next to the text it
+implements: after the linear-map protocol and the zero argument in
+Section~\ref{sec:tools}, and at the end of each protocol's walk in
+Section~\ref{sec:steps}, where the definitions are matched to the steps.
 
 The order is: the problem (Section~\ref{sec:problem}); the cryptographic
 tools (Section~\ref{sec:tools}); the three ballots step by step, with
@@ -328,6 +335,30 @@ simulated one. So the two distributions are the same list up to the order
 in which the randomness is enumerated (\rocq{zk\_of\_bijection}).
 \end{proof}
 
+\paragraph{In Rocq} \rocq{Crypto/LinearSigma.v} works over an abstract
+vector space \rocq{V} and a map \rocq{phi : list F -> V} whose linearity
+is a pair of section hypotheses (\rocq{phi\_add}, \rocq{phi\_scale}); the
+witness has length \rocq{W}. The protocol is three definitions:
+\begin{coq}
+Record lin_proof : Type := mk_lin { lin_a : V; lin_z : list F }.
+
+Definition lin_verify (T : V) (c : F) (pf : lin_proof) : bool :=
+  (Nat.eqb (length (lin_z pf)) W) &&
+  (if Vdec (phi (lin_z pf)) (vadd (lin_a pf) (smul T c)) then true else false).
+
+Definition lin_prove (w a : list F) (c : F) : lin_proof :=
+  mk_lin (phi a) (ladd a (lscale c w)).
+
+Definition lin_sim (T : V) (c : F) (z : list F) : lin_proof :=
+  mk_lin (vadd (phi z) (vopp (smul T c))) z.
+\end{coq}
+\rocq{lin\_prove} is the honest prover ($A = \varphi(a)$, $z = a + cw$),
+\rocq{lin\_verify} the check $\varphi(z) = A + cT$, and \rocq{lin\_sim}
+the simulator ($A = \varphi(z) - cT$). The batched ballot instantiates
+\rocq{V} with $\G^{7} \times \Z_q^{2}$ and \rocq{phi} with the map of its
+statement (\rocq{phi} below); the simplified ballot uses $\G^{5}$ and
+\rocq{phi3}.
+
 \subsection{The Bayer--Groth zero argument}\label{sec:zero}
 For a challenge $y \in \Z_q$ define the bilinear map on vectors of length
 $n$,
@@ -397,6 +428,164 @@ challenges are needed. The blinding vectors make $A(x)$ and $C(x)$
 uniform, which is where zero-knowledge comes from. The development
 mechanises the Swiss Post form of the argument~\cite{swisspost}, which
 arranges the same polynomial with different indexing.
+
+\paragraph{A worked example} The smallest useful instance is $r = 1$
+with $a = X$ and $c = X - \mathbf{1}$: it proves that a committed vector
+is a bit vector. Take $n = 2$ and the key of the Pedersen example,
+$h_1 = 32$ and $\mathbf{g} = (g_1, g_2) = (34, 8)$; scalars are committed
+over the first generator, $\com(d; t) = h_1^{t} g_1^{d}$. Vectors and
+scalars are modulo $23$, group elements modulo $47$.
+
+\ex{\emph{Statement.} The prover commits to $X = (1, 0)$ with randomness
+$6$: $C_X = 32^{6} \cdot 34^{1} \cdot 8^{0} = 28$. The verifier computes
+$\com(-\mathbf{1}; 0) = 34^{-1} \cdot 8^{-1} = 18 \cdot 6 = 14$ and
+$C_c = C_X \cdot 14 = 16$, which by the homomorphism is a commitment to
+$c = X - \mathbf{1} = (0, -1) = (0, 22)$, again with randomness $6$. The
+challenge $y = 3$ gives the weights $y^{1} = 3$ and $y^{2} = 9$, and the
+claim is
+\[
+  X \star_3 c = 3 \cdot 1 \cdot 0 + 9 \cdot 0 \cdot 22 = 0 .
+\]
+\emph{Announcement.} The prover draws $a_0 = (2, 5)$ with randomness $7$
+and $c_0 = (4, 6)$ with randomness $3$, and computes the two coefficients
+of $A(x) \star_3 C(x)$ that are not the claim:
+\begin{align*}
+  d_0 &= a_0 \star_3 c_0 = 3 \cdot 2 \cdot 4 + 9 \cdot 5 \cdot 6 = 294 \equiv 18,\\
+  d_1 &= a_0 \star_3 c + X \star_3 c_0 = (0 + 9 \cdot 5 \cdot 22) + (3 \cdot 1 \cdot 4 + 0) = 1002 \equiv 13 .
+\end{align*}
+It posts $\com(a_0; 7) = 25$, $\com(c_0; 3) = 9$, $D_0 = \com(18; 2) =
+12$, and $D_1 = \com(13; 19) = 4$.
+
+\emph{Challenge and response.} The verifier sends $x = 5$. The prover
+answers
+\begin{align*}
+  A(5) &= a_0 + 5X = (7, 5), & &\text{randomness } 7 + 5 \cdot 6 \equiv 14;\\
+  C(5) &= 5c + c_0 = (4, 1), & &\text{randomness } 5 \cdot 6 + 3 \equiv 10;
+\end{align*}
+and $t = 2 + 5 \cdot 19 \equiv 5$ for the scalar commitments. (The second
+entry of $C(5)$ is $5 \cdot 22 + 6 = 116 \equiv 1$.)
+
+\emph{Verification.} The three equations hold:
+\begin{align*}
+  \com(A(5); 14) &= 32^{14} \cdot 34^{7} \cdot 8^{5} = 2 \cdot 8 \cdot 9 = 3,
+    & \com(a_0) \cdot C_X^{5} &= 25 \cdot 2 = 3;\\
+  \com(C(5); 10) &= 32^{10} \cdot 34^{4} \cdot 8^{1} = 16 \cdot 32 \cdot 8 = 7,
+    & C_c^{5} \cdot \com(c_0) &= 6 \cdot 9 = 7;\\
+  \com\big(A(5) \star_3 C(5); 5\big) &= \com(14; 5) = 4 \cdot 17 = 21,
+    & D_0 \cdot D_1^{5} &= 12 \cdot 37 = 21,
+\end{align*}
+where $A(5) \star_3 C(5) = 3 \cdot 7 \cdot 4 + 9 \cdot 5 \cdot 1 = 129
+\equiv 14$, which is indeed $d_0 + 5 d_1 = 18 + 65 \equiv 14$. The first
+equation shows that the response opens $\com(a_0) \cdot C_X^{x}$, the second
+does the same for $C_c$, and the third that the product of the two openings
+is the committed linear polynomial $d_0 + x d_1$, with nothing at $x^2$.
+
+\emph{A false claim.} Now let the prover commit to $X' = (1, 2)$, which
+is not a bit vector: $C_{X'} = \com((1, 2); 6) = 6$, the verifier derives
+$C_{c'} = 6 \cdot 14 = 37$, a commitment to $c' = (0, 1)$, and the claim
+is false: $X' \star_3 c' = 9 \cdot 2 \cdot 1 = 18$. With the same blinding
+the product polynomial is
+\[
+  A(x) \star_3 C(x) = 18 + 4x + 18x^{2},
+\]
+so $d_0 = 18$, $d_1 = 4$, and $D_1 = \com(4; 19) = 21$. The first two
+checks still pass at $x = 5$, with $A(5) = (7, 15)$ and $C(5) = (4, 11)$.
+The third fails: $A(5) \star_3 C(5) = 84 + 1485 \equiv 5$ and $\com(5; 5) =
+4 \cdot 7 = 28$, while $D_0 \cdot D_1^{5} = 12 \cdot 36 = 9 = \com(15; 5)$.
+The missing $18 \cdot 5^{2} \equiv 13$ is exactly the difference $5 - 15$.
+A cheating prover may choose $d_0$ and $d_1$ freely, for instance $d_1 = 4
++ 18 \cdot 5 \equiv 2$ to pass at $x = 5$, but then $d_0 + d_1 x = 18 +
+4x + 18x^{2}$ is a non-zero quadratic equation in $x$, which holds for at
+most two of the $23$ challenges (here $x = 0$ and $x = 5$). Three accepting
+challenges on one announcement are therefore impossible, which is the
+$3$-special soundness.}
+
+\paragraph{In Rocq} \rocq{Crypto/BayerGroth.v} defines the map $\star_y$,
+the transcript, the verifier, and the prover:
+\begin{coq}
+Fixpoint star_w (w y : F) (a b : list F) : F :=
+  match a, b with
+  | a0 :: a', b0 :: b' => a0 * b0 * w + star_w (w * y) y a' b'
+  | _, _ => zero
+  end.
+Definition star (y : F) (a b : list F) : F := star_w y y a b.
+
+Record zero_argument : Type := mk_zero {
+  za_cA0 : G; za_cBm : G; za_cd : list G;
+  za_a : list F; za_b : list F; za_r : F; za_s : F; za_t : F }.
+
+Definition zero_verify (h : G) (gs : list G) (cA cB : list G) (y x : F)
+    (arg : zero_argument) : bool :=
+  let m := length cA in
+  (1 <=? m) && (length cB =? m) && (length (za_cd arg) =? 2 * m + 1) &&
+  (if Gdec (nth (S m) (za_cd arg) gid) gid then true else false) &&
+  (if Gdec (geval (za_cA0 arg :: cA) x) (com h gs (za_a arg) (za_r arg))
+   then true else false) &&
+  (if Gdec (geval (za_cBm arg :: rev cB) x) (com h gs (za_b arg) (za_s arg))
+   then true else false) &&
+  (if Gdec (geval (za_cd arg) x) (com h gs [star y (za_a arg) (za_b arg)] (za_t arg))
+   then true else false) &&
+  (length (za_a arg) =? length gs) && (length (za_b arg) =? length gs).
+
+Definition zero_prove (h : G) (gs : list G) (A B : list (list F)) (r s : list F)
+    (y : F) (a0 bm : list F) (r0 sm : F) (t1 t2 : list F) (x : F)
+    : zero_argument :=
+  let As := a0 :: A in
+  let Bs := bm :: rev B in
+  let d := fpmul (star y) As Bs in
+  let tz := t1 ++ zero :: t2 in
+  mk_zero (com h gs a0 r0) (com h gs bm sm)
+    (com_list h gs (map (fun dk => [dk]) d) tz)
+    (lveval As x) (lveval Bs x) (feval (r0 :: r) x) (feval (sm :: rev s) x)
+    (feval tz x).
+\end{coq}
+Reading the code against the text:
+\begin{itemize}[nosep]
+  \item \rocq{star y a b} is $\sum_j a_j b_j y^{j+1}$ with $j$ counted
+  from $0$, which is $a \star_y b$ with $j$ counted from $1$;
+  \item \rocq{com h gs a r} is $h^{r} \prod_j g_j^{a_j}$, so
+  \rocq{com h gs [d] t} is the scalar commitment $h_1^{t} g_1^{d}$;
+  \item \rocq{geval (c :: cs) x} is $c \cdot \prod_i \mathit{cs}_i^{x^{i+1}}$,
+  the commitment to the polynomial evaluated at $x$;
+  \item in \rocq{zero\_verify} the local \rocq{m} is the number of rows
+  $r$, not the number of candidates;
+  \item the prover reverses the right rows (\rocq{rev B}), so the pair
+  $(a_i, b_i)$ lands at $x^{r+1}$ in the product, as in
+  Section~\ref{sec:ballot2sd}, Step~5;
+  \item the prover commits to all $2r + 1$ coefficients $d_k$ but uses
+  randomness $0$ at index $r + 1$ (\rocq{tz = t1 ++ zero :: t2}), so that
+  commitment is $\com(0; 0) = 1$, and the verifier's fourth test checks it
+  is the identity.
+\end{itemize}
+In the example, \rocq{A = [X]}, \rocq{B = [c]}, \rocq{bm} is $c_0$,
+\rocq{t1 = [2; 19]}, and \rocq{t2 = []}, so \rocq{za\_cd} is $(D_0, D_1,
+D_2) = (12, 4, 1)$, and the third equation above is $D_0 D_1^{5}
+D_2^{25} = 21$.
+
+Soundness is stated in rewinding form: $2r + 1$ accepting transcripts that
+share the announcement and have distinct challenges \rocq{xs} give openings
+of the statement satisfying the relation, or a binding break:
+\begin{coq}
+Theorem zero_soundness : forall (h : G) (gs : list G) (cA cB : list G) (y : F)
+  (cA0 cBm : G) (cd : list G) (xs : list F) (a b : nat -> list F) (r s t : nat -> F),
+  (1 <= length gs)%nat ->
+  NoDup xs -> length xs = (2 * length cA + 1)%nat ->
+  (forall j, (j < length xs)%nat ->
+    zero_verify h gs cA cB y (nth j xs zero)
+      (mk_zero cA0 cBm cd (a j) (b j) (r j) (s j) (t j)) = true) ->
+  (exists (A B : list (list F)) (ra sb : list F),
+    cA = com_list h gs A ra /\ cB = com_list h gs B sb /\
+    length A = length cA /\ length B = length cA /\
+    length ra = length cA /\ length sb = length cA /\
+    (forall v, In v A -> length v = length gs) /\
+    (forall v, In v B -> length v = length gs) /\
+    fold_right add zero (map (fun p => star y (fst p) (snd p)) (combine A B)) = zero)
+  \/ binding_break h gs.
+\end{coq}
+Completeness is \rocq{zero\_completeness}: if $\sum_i a_i \star_y b_i = 0$
+and the lengths match, \rocq{zero\_verify} accepts \rocq{zero\_prove} for
+every $x$. Zero-knowledge is \rocq{zero\_shvzk} in
+\rocq{Crypto/BayerGrothZK.v}.
 
 \section{The protocols, step by step}\label{sec:steps}
 This section runs through each protocol once, from what the voter knows
@@ -628,6 +817,157 @@ give $b_{ij} = [s_i < s_j]$ (Theorem~\ref{thm:b1sound}). Ballot 1 carries
 $3 \cdot 4 + 9 \cdot 2 + 9 \cdot 7 = 93$ Chaum--Pedersen transcripts; in
 general about $2m^3$, which is $6.2$\,MB at $m = 17$.
 
+\subsubsection*{The first protocol in Rocq}
+The protocol is \rocq{Frontend/Schulze.v}. Its sections are parametric
+in the number of candidates \rocq{m}, the generator \rocq{g}, and the
+election key \rocq{h}; where $m \ge 1$ is needed (the prover and the
+theorems) the number of candidates is written \rocq{S n}. A ciphertext is a pair \rocq{G * G};
+\rocq{cmul}, \rocq{cinv}, and \rocq{cpow} are the componentwise product,
+inverse, and power, the homomorphisms of Section~\ref{sec:tools}.
+
+\paragraph{The messages and the ballot (Steps 1, 3, 4)} The two public
+message lists of Step~4 and the shape of a ballot:
+\begin{coq}
+Definition msgs_pos : Vector.t G (S m) :=
+  Vector.map (fun k => g ^ natF (fin_idx k)) (fin_enum (S m)).
+
+Definition pair_shift : nat := S (m + m).
+
+Definition msgs_pair : Vector.t G (S m + m) :=
+  Vector.map (fun k => ginv (g ^ natF (fin_idx k))) (fin_enum (S m)) ++
+  Vector.map (fun k => g ^ natF (pair_shift + S (fin_idx k))) (fin_enum m).
+
+Definition membership_proof (n : nat) : Type :=
+  @sigma_proto F (G * G) n (S n) n.
+
+Definition pos_cell : Type := G * G * membership_proof (S m).
+Definition pair_cell : Type :=
+  (G * G) * @sigma_proto F (G * G) 2 3 2 * membership_proof (S m + m).
+Definition ballot : Type :=
+  Vector.t pos_cell m * Vector.t (Vector.t pair_cell m) m.
+\end{coq}
+\rocq{msgs\_pos} is $(g^{0}, \ldots, g^{m})$, the plaintexts allowed
+for a position. \rocq{pair\_shift} is the shift $K = 2m + 1$ of Step~3,
+and \rocq{msgs\_pair} is $S_{\mathrm{pair}}$ as group elements in the
+order of the table in Step~9: $g^{0}, g^{-1}, \ldots, g^{-m}$ for the case
+$b = 0$, then $g^{K+1}, \ldots, g^{K+m}$ for $b = 1$. A membership proof
+over $\ell$ messages is a $\Sigma$-transcript with $\ell$ announcements,
+$1 + \ell$ challenges (the main challenge $e$, then the branch challenges
+$e_i$ of Step~7), and $\ell$ responses; the bit proof is the case $\ell =
+2$. A position cell is $\Enc(s_i)$ with its position proof. A pair cell is
+$\Enc(b_{ij})$, its bit proof, and the membership proof on the shifted
+ciphertext. A ballot is $m$ position cells and an $m \times m$ matrix of
+pair cells.
+
+\paragraph{The verifier (Steps 2, 3, 11)} The shifted ciphertext and the
+interactive verifier:
+\begin{coq}
+Definition pair_combined (cd : G * G) (pc : pair_cell) : G * G :=
+  cmul (cpow (pair_bit pc) (natF pair_shift)) cd.
+
+Definition verify_pos_cell (pc : pos_cell) : bool :=
+  verify_membership g h msgs_pos (pos_cipher pc) (snd pc).
+
+Definition verify_pair_cell (cd : G * G) (pc : pair_cell) : bool :=
+  (@verify_encryption_vote_proof F zero one add Fdec G ginv gop gpow Gdec
+     g h (pair_bit pc, pair_bit_proof pc) &&
+   verify_membership g h msgs_pair (pair_combined cd pc) (pair_mem_proof pc))%bool.
+
+Definition verify_pairs (b : ballot) : bool :=
+  forall_fin m (fun i => forall_fin m (fun j =>
+    verify_pair_cell
+      (cmul (pos_cipher (Vector.nth (fst b) j))
+            (cinv (pos_cipher (Vector.nth (fst b) i))))
+      (Vector.nth (Vector.nth (snd b) i) j))).
+
+Definition verify_ballot (b : ballot) : bool :=
+  (verify_positions b && verify_pairs b)%bool.
+\end{coq}
+The argument \rocq{cd} of \rocq{verify\_pair\_cell} is $\Enc(\delta_{ij})
+= \Enc(s_j) / \Enc(s_i)$, computed in \rocq{verify\_pairs} from the two
+position ciphertexts: this is the anchoring of Step~2. \rocq{pair\_combined}
+is the shifted ciphertext $\Enc(b_{ij})^{K} \cdot \Enc(\delta_{ij})$ of
+Step~3. \rocq{verify\_positions} applies \rocq{verify\_pos\_cell} to every
+candidate. \rocq{verify\_membership} is the disjunctive Chaum--Pedersen
+verifier of \rocq{Crypto/EncProof.v} (Steps 5 to~8): every branch passes
+its two equations and the branch challenges sum to the main one. The bit
+proof uses the two-message instance of the same verifier from the approval
+ballot of \rocq{Frontend/Approval.v}.
+
+\paragraph{The prover (Steps 5 to 9)} The voter's pair cell:
+\begin{coq}
+Definition encrypt_pair (si sj : nat) (ri rj : F) (rd : pair_rand) :
+  @pair_cell m :=
+  let b : F := if Nat.ltb si sj then one else zero in
+  let cb := @enc F G gop gpow g h b (pr_rb rd) in
+  let pfb := @generate_enc_proof F zero one add mul sub opp Fdec G ginv gop gpow
+    g h (pr_rb rd) b (pr_uscs_b rd) cb (pr_c_b rd) in
+  let rdelta := sub rj ri in
+  let cd := @enc F G gop gpow g h (sub (natF sj) (natF si)) rdelta in
+  let rc := (natF (@pair_shift m) * pr_rb rd) + rdelta in
+  let cc := cmul (cpow cb (natF (@pair_shift m))) cd in
+  (cb, pfb, prove_membership g h (msgs_pair (m := m) g) (pair_index si sj)
+    rc (pr_uscs_m rd) cc (pr_c_m rd)).
+\end{coq}
+The voter computes the bit $b = [s_i < s_j]$, encrypts it with
+randomness \rocq{pr\_rb rd}, and proves it is a bit. It then rebuilds the
+verifier's $\Enc(\delta_{ij})$ with randomness $r_j - r_i$, and the
+shifted ciphertext \rocq{cc} with randomness $K r_{ij} + r_j - r_i$, as
+in Step~3. The membership proof is for the message at
+\rocq{pair\_index si sj}: index $s_i - s_j$ when $b = 0$, and $m + (s_j -
+s_i)$ when $b = 1$. The record \rocq{pair\_rand} holds the bit's
+encryption randomness \rocq{pr\_rb} and, for each of the two proofs, the
+randomness of Steps 6 and~7 (\rocq{pr\_uscs\_b}, \rocq{pr\_uscs\_m}:
+one exponent per branch and one challenge per simulated branch) and a
+main challenge (\rocq{pr\_c\_b}, \rocq{pr\_c\_m}). Positions
+are proved by \rocq{encrypt\_pos} in the same way, and
+\rocq{encrypt\_ballot} fills both tables.
+
+\paragraph{One challenge (Steps 10 and 11)} The non-interactive
+verifier:
+\begin{coq}
+Definition ballot_challenge (b : @ballot m) : F := H (ballot_transcript b).
+
+Definition nizk_verify_ballot (b : @ballot m) : bool :=
+  (challenges_are (ballot_challenge b) b && verify_ballot g h b)%bool.
+\end{coq}
+\rocq{ballot\_transcript} lists every ciphertext and every announcement.
+\rocq{challenges\_are c b} checks that every proof of the ballot has main
+challenge $c$. The hash \rocq{H} is a section parameter: the theorems
+hold for every \rocq{H}, and the extracted drivers instantiate it with
+SHAKE-256. The voter (\rocq{nizk\_encrypt\_ballot}) computes
+the ballot once with arbitrary challenges, hashes its transcript, which
+does not depend on the challenges (\rocq{ballot\_transcript\_set\_challenges}),
+and computes it again with the hashed challenge.
+
+\paragraph{The theorems} Completeness is \rocq{ballot\_valid} (and
+\rocq{nizk\_ballot\_valid} for the non-interactive form): for positions
+$s_i \le m$ and any randomness, \rocq{verify\_ballot} accepts
+\rocq{encrypt\_ballot s rd}. Soundness, Step~8 for the whole ballot, is
+stated in rewinding form:
+\begin{coq}
+Theorem ballot_sound : forall (n : nat) (x : F) (g h : G) (b b' : @ballot (S n)),
+  h = g ^ x -> exp_injective g -> natF_injective (4 * S n + 2) ->
+  same_announcements b b' -> different_challenges b b' ->
+  verify_ballot g h b = true -> verify_ballot g h b' = true ->
+  exists s : Vector.t nat (S n),
+    (forall i, Vector.nth s i <= S n) /\
+    (forall i j, plaintext_bit x b i j =
+      g ^ (if Nat.ltb (Vector.nth s i) (Vector.nth s j) then one else zero)).
+\end{coq}
+The hypotheses are two accepted ballots \rocq{b} and \rocq{b'} with the
+same ciphertexts and announcements, which is \rocq{same\_announcements},
+and with different main challenges in every proof, which is
+\rocq{different\_challenges}. From them the theorem
+extracts a position vector $s$ such that every bit ciphertext decrypts
+to $g^{[s_i < s_j]}$; \rocq{plaintext\_bit} is the decryption
+\rocq{cdec x} of the bit ciphertext. The side conditions say that $g$ has prime order
+(\rocq{exp\_injective}) and that the field's characteristic is above
+$4m + 2$, so the plaintexts of Step~3 do not wrap around
+(\rocq{natF\_injective}). Zero-knowledge is \rocq{ballot\_zk}: the real
+proofs and the simulated proofs, given only the ciphertexts and the
+challenges, are the same distribution up to permutation.
+
 \subsection{The batched protocol}
 The first protocol pays $2m^3$ transcripts because every comparison is a
 disjunction over a range. The batched protocol removes the disjunctions:
@@ -839,6 +1179,169 @@ verify, against $6.2$\,MB, $130$\,s, and $68$\,s for the first.
 Completeness, special soundness, and SHVZK are machine-checked, and the
 verifier is extracted to OCaml (Section~\ref{sec:mech}).
 
+\subsubsection*{The batched protocol in Rocq}
+The protocol is \rocq{Frontend/SchulzeBatched.v}. Its section fixes
+\rocq{L}, the election key \rocq{g}, \rocq{h}, and the commitment keys
+\rocq{h1}, \rocq{gs1} (length $n$), and \rocq{gs2} (length $Ln$). Two
+names differ from this note. The number of candidates is \rocq{m := S
+n}, so the Rocq \rocq{n} is $m - 1$. The number of cells $n = m^2$ is
+called \rocq{K}, and $Ln$ is \rocq{NX}; this \rocq{K} is unrelated to the
+shift $K = 2m + 1$ of the first protocol. Vectors are lists, and cell $k$
+is the pair $(k / m, k \bmod m)$.
+
+\paragraph{The witness and the linear map (Steps 1, 2, 4)} The witness of
+Step~4 is one flat list \rocq{w} of length \rocq{W}, with $s$ at offset
+\rocq{oS = 0}, $\delta$ at \rocq{oD}, $b$ at \rocq{oB}, $p$ at \rocq{oP},
+$X$ at \rocq{oX}, and the six scalars $\rho_s, \rho_\delta, \rho_b,
+\rho_p, \rho_X, R$ at \rocq{oR}. \rocq{wslice w off len} reads a vector
+and \rocq{wat w i} one entry. The map $\varphi$ with its nine rows:
+\begin{coq}
+Definition phi (beta g1 g2 : list F) (w : list F) : St :=
+  (vec7 (com h1 gs1 (wslice w oS m) (wat w oR))
+        (com h1 gs1 (wslice w oD K) (wat w (oR + 1)))
+        (com h1 gs1 (wslice w oB K) (wat w (oR + 2)))
+        (com h1 gs1 (wslice w oP K) (wat w (oR + 3)))
+        (com h1 gs2 (wslice w oX NX) (wat w (oR + 4)))
+        (g ^ wat w (oR + 5))
+        (gop (g ^ dot beta (wslice w oB K) K) (h ^ wat w (oR + 5))),
+   vec2 (fsum (fun k => nth k g1 zero *
+            (wat w (oD + k) - (wat w (oS + k mod m) - wat w (oS + k / m)))) K)
+        (fsum (fun k => nth k g2 zero *
+            (vbits (wslice w oX NX) k + wat w (oD + k)
+             - (one + one) * wat w (oP + k) + wat w (oB + k))) K)).
+\end{coq}
+The seven group rows are the five commitments, $g^{R}$, and $g^{\langle
+\beta, b\rangle} h^{R}$. The two field rows are the anchoring $\langle
+\gamma_1, \delta - Ms \rangle$ and the binary expansion $\langle \gamma_2,
+\sum_t 2^{t} X^{(t)} + \delta - 2p + b \rangle$; the arguments \rocq{g1}
+and \rocq{g2} are $\gamma_1$ and $\gamma_2$, not keys. \rocq{vbits X k} is
+$\sum_{t < L} 2^{t} X_{tn + k}$, the value encoded by the bits of cell
+$k$. $M$ never appears as a matrix: row $k$ of $\delta - Ms$ is
+$\delta_k - (s_{k \bmod m} - s_{k / m})$.
+
+\paragraph{The ballot and the verifier (Steps 3, 5, 6)}
+\begin{coq}
+Definition cbeta (beta : list F) (cs : list (G * G)) : G * G :=
+  lmexp (vid := cid) (vadd := cmul) (smul := cpow) cs beta.
+Definition cneg (gs : list G) (len : nat) : G := com h1 gs (repeat (opp one) len) zero.
+
+Record ballot2 : Type := mk_ballot2 {
+  b2_cs : list (G * G);
+  b2_Cs : G; b2_Cd : G; b2_Cb : G; b2_Cp : G; b2_CX : G;
+  b2_lin : lin_proof;
+  b2_z1 : zero_argument;
+  b2_z2 : zero_argument;
+  b2_z3 : zero_argument }.
+
+Record chal2 : Type := mk_chal2 {
+  ch_beta : list F; ch_g1 : list F; ch_g2 : list F; ch_c : F;
+  ch_y1 : F; ch_x1 : F; ch_y2 : F; ch_x2 : F; ch_y3 : F; ch_x3 : F }.
+
+Definition target (beta : list F) (bt : ballot2) : St :=
+  let cb := cbeta beta (b2_cs bt) in
+  (vec7 (b2_Cs bt) (b2_Cd bt) (b2_Cb bt) (b2_Cp bt) (b2_CX bt) (fst cb) (snd cb),
+   vec2 zero zero).
+
+Definition verify_ballot2 (ch : chal2) (bt : ballot2) : bool :=
+  (Nat.eqb (length (b2_cs bt)) K) &&
+  lin_verify W (phi (ch_beta ch) (ch_g1 ch) (ch_g2 ch)) (target (ch_beta ch) bt)
+    (ch_c ch) (b2_lin bt) &&
+  zero_verify h1 gs1 [b2_Cb bt; b2_Cp bt] [b2_Cd bt; cneg gs1 K]
+    (ch_y1 ch) (ch_x1 ch) (b2_z1 bt) &&
+  zero_verify h1 gs2 [b2_CX bt] [gop (b2_CX bt) (cneg gs2 NX)]
+    (ch_y2 ch) (ch_x2 ch) (b2_z2 bt) &&
+  zero_verify h1 gs1 [b2_Cb bt] [gop (b2_Cb bt) (cneg gs1 K)]
+    (ch_y3 ch) (ch_x3 ch) (b2_z3 bt).
+\end{coq}
+\rocq{cbeta beta cs} is $C_\beta = \prod_k c_k^{\beta_k}$, and
+\rocq{cneg gs len} is $\com(-\mathbf{1}; 0)$. A ballot is the $n$
+ciphertexts, the five commitments of Step~2, one linear proof, and three
+zero arguments. The ten challenges of Step~3 and Step~6 are a record.
+\rocq{target} is the statement $T$ of Step~4, read off the ballot.
+\rocq{verify\_ballot2} is Step~6 line by line: the length check, the
+linear argument of Section~\ref{sec:linsigma} for \rocq{phi} and
+\rocq{target}, and the three zero arguments of Step~5. The right rows of
+the bit arguments are formed by the verifier, as $C \cdot \com(-\mathbf{1};
+0)$ (\rocq{gop C (cneg ...)}).
+
+\paragraph{Removing the interaction (Step 8)}
+\begin{coq}
+Definition vec_chal (tag : nat) (bt : ballot2) : list F :=
+  map (fun k => H (B2N tag :: B2N k :: items_base bt)) (seq 0 K).
+Definition challenges_of (bt : ballot2) : chal2 :=
+  mk_chal2 (vec_chal 1 bt) (vec_chal 2 bt) (vec_chal 3 bt)
+    (H (B2N 6 :: items_base bt ++ items_st (lin_a (b2_lin bt))))
+    (H (B2N 4 :: items_base bt)) (H (B2N 7 :: items_base bt ++ items_zero (b2_z1 bt)))
+    (H (B2N 5 :: items_base bt)) (H (B2N 8 :: items_base bt ++ items_zero (b2_z2 bt)))
+    (H (B2N 9 :: items_base bt)) (H (B2N 10 :: items_base bt ++ items_zero (b2_z3 bt))).
+\end{coq}
+\rocq{items\_base} lists the ciphertexts and the five commitments, and
+the tag \rocq{B2N k} separates the queries. Each of $\beta$, $\gamma_1$,
+$\gamma_2$ is $n$ hashes, one per coordinate. $c$ adds the linear
+announcement and each $x_i$ the announcement of its zero argument, so
+every challenge comes after what it must bind. \rocq{nizk\_verify\_ballot2}
+is \rocq{verify\_ballot2 (challenges\_of bt) bt}, and
+\rocq{nizk\_encrypt\_ballot2} is the three-pass voter.
+
+\paragraph{The voter} \rocq{encrypt\_ballot2 ch sn rd} computes the
+vectors of Step~1 from the positions \rocq{sn} (\rocq{hon\_s},
+\rocq{hon\_d}, \rocq{hon\_b}, \rocq{hon\_p}, \rocq{hon\_X}), encrypts $b$,
+commits, builds the witness (\rocq{hon\_w}), and runs \rocq{lin\_prove}
+and three \rocq{zero\_prove}s with the randomness in \rocq{rd}.
+\rocq{ballot2\_valid} is its completeness.
+
+\paragraph{Soundness (Step 7)} A random $\beta$ or $\gamma$ catches a
+wrong vector with high probability. In rewinding form this becomes: the
+proof is accepted at a base vector and at $n$ variants of it that each
+change one coordinate. A random $y$ becomes $n$ distinct non-zero values
+of $y$, the number of points that fixes a polynomial of degree $n$:
+\begin{coq}
+Theorem ballot2_sound : forall (x : F) (bt : ballot2) (beta0 g10 g20 : list F)
+  (c0 c1 : F) (Y1 Y2 Y3 : list F),
+  h = g ^ x -> (1 <= L)%nat -> length gs1 = K -> length gs2 = NX ->
+  natF_injective (3 * Nat.pow 2 L + 2) ->
+  length (b2_cs bt) = K -> length beta0 = K -> length g10 = K -> length g20 = K ->
+  c0 <> c1 ->
+  lin_accepts beta0 g10 g20 bt c0 c1 ->
+  (forall k, (k < K)%nat -> exists beta', differ_at k beta' beta0 /\
+     lin_accepts beta' g10 g20 bt c0 c1) ->
+  (forall k, (k < K)%nat -> exists g1', differ_at k g1' g10 /\
+     lin_accepts beta0 g1' g20 bt c0 c1) ->
+  (forall k, (k < K)%nat -> exists g2', differ_at k g2' g20 /\
+     lin_accepts beta0 g10 g2' bt c0 c1) ->
+  NoDup Y1 -> length Y1 = K -> (forall y, In y Y1 -> y <> zero) ->
+  (forall y, In y Y1 -> zero_accepts gs1 [b2_Cb bt; b2_Cp bt] [b2_Cd bt; cneg gs1 K] y) ->
+  NoDup Y2 -> length Y2 = NX -> (forall y, In y Y2 -> y <> zero) ->
+  (forall y, In y Y2 -> zero_accepts gs2 [b2_CX bt] [gop (b2_CX bt) (cneg gs2 NX)] y) ->
+  NoDup Y3 -> length Y3 = K -> (forall y, In y Y3 -> y <> zero) ->
+  (forall y, In y Y3 -> zero_accepts gs1 [b2_Cb bt] [gop (b2_Cb bt) (cneg gs1 K)] y) ->
+  binding_break h1 gs1 \/ binding_break h1 gs2 \/
+  exists (pos : Vector.t nat m),
+    (forall i, (Vector.nth pos i <= 2 * Nat.pow 2 L)%nat) /\
+    forall i j : Fin.t m,
+      cdec x (nth (fin_idx i * m + fin_idx j) (b2_cs bt) cid) =
+      g ^ (if Nat.ltb (Vector.nth pos i) (Vector.nth pos j) then one else zero).
+\end{coq}
+\rocq{lin\_accepts beta g1 g2 bt c0 c1} says that the linear argument has
+accepting transcripts for two challenges $c_0 \ne c_1$ on one
+announcement, the hypothesis of \rocq{lin\_soundness}. \rocq{differ\_at k
+u v} says that $u$ and $v$ differ exactly at coordinate $k$.
+\rocq{zero\_accepts gs cA cB y} says that the zero argument at $y$ has $2r
++ 1$ accepting transcripts with distinct $x$, the hypothesis of
+\rocq{zero\_soundness}. The conclusion is a binding break of one of the
+two keys, or positions $\mathit{pos}$ such that the ciphertext of cell
+$(i, j)$ decrypts to $g^{[\mathit{pos}_i < \mathit{pos}_j]}$. The proof
+follows Step~7: one witness from the base transcripts (\rocq{lin\_open});
+every other accepted tuple opens the same vectors (\rocq{open\_agree});
+the $\beta$ variants make each ciphertext decrypt to its committed bit
+(\rocq{beta\_bits}); the $\gamma$ variants make both field rows vanish
+coordinate by coordinate (\rocq{gamma\_rows}); the zero arguments give $p
+= b \circ \delta$ and the bit vectors (\rocq{zero\_prod\_open},
+\rocq{zero\_bits\_open}); and \rocq{decode\_positions} finishes.
+Zero-knowledge is \rocq{ballot2\_zk}: the real ballot and the simulator's
+output, given only the ciphertexts and the challenges, are the same
+distribution.
+
 \subsection{The simplified batched protocol}\label{sec:steps3}
 The batched protocol proves four facts about committed vectors with four
 arguments and ten challenges. Two of the facts are linear, and a verifier
@@ -1015,6 +1518,158 @@ soundness, SHVZK, and the end-to-end theorem are machine-checked
 (\rocq{ballot3\_valid}, \rocq{ballot3\_sound}, \rocq{ballot3\_zk},
 \rocq{schulze\_end\_to\_end3}), and the Gentoo elections run through it
 take a second or two per ballot (Section~\ref{sec:ballot2s}).
+
+\subsubsection*{The simplified protocol in Rocq}
+The protocol is \rocq{Frontend/SchulzeSimple.v}. It reuses the vectors,
+the honest voter's computations, and the decoding of
+\rocq{SchulzeBatched.v}, and keeps its names: \rocq{m := S n} candidates
+and \rocq{K} $= n = m^2$ cells. The section fixes \rocq{L}, \rocq{g},
+\rocq{h}, and one commitment key \rocq{h1}, \rocq{gs1} of length
+\rocq{K}. One new name clashes with this note: \rocq{R} is the number of
+rows $L + 3$ of the zero argument, not the randomness $R = \langle \beta,
+r \rangle$.
+
+\paragraph{The derived key and $C_0$ (Steps 1 and 3)}
+\begin{coq}
+Definition mcoef (k i : nat) : F :=
+  (if Nat.eqb (k mod m) i then one else zero) - (if Nat.eqb (k / m) i then one else zero).
+Definition mcol (i : nat) : list F := map (fun k => mcoef k i) (seq 0 K).
+Definition Ms (s : list F) : list F :=
+  map (fun k => nth (k mod m) s zero - nth (k / m) s zero) (seq 0 K).
+Definition gd : list G := map (fun i => gmexp gs1 (mcol i)) (seq 0 m).
+
+Lemma com_gd : forall s rho, length s = m -> com h1 gd s rho = com h1 gs1 (Ms s) rho.
+
+Definition pows2 : list F := map pow2F (seq 0 L).
+Definition C0 (Cd Cb Cp : G) (CX : list G) : G :=
+  gop (gop Cd Cb) (gop (Cp ^ (opp (one + one))) (gmexp CX pows2)).
+\end{coq}
+\rocq{mcoef k i} is the entry $M_{ki}$, $+1$ if candidate $i$ is the
+second of pair $k$ and $-1$ if it is the first. \rocq{mcol i} is column
+$i$, and \rocq{gd} is the derived key $g'_i = \prod_k g_k^{M_{ki}}$
+(\rocq{gmexp} is the multi-exponentiation $\prod_k g_k^{a_k}$).
+\rocq{com\_gd} is the identity of Step~1:
+$\com_{\mathbf{g}'}(s; \rho) = \com_{\mathbf{g}}(Ms; \rho)$. \rocq{C0} is
+the verifier's product of Step~3, $C_\delta \cdot C_b \cdot C_p^{-2} \cdot
+\prod_t C_{X^{(t)}}^{2^{t}}$.
+
+\paragraph{The linear map and the ballot (Steps 2, 4, 5)} The witness is
+$s$ at offset $0$, $b$ at \rocq{oB3}, and the four scalars $\rho_\delta,
+\rho_b, R, \rho^*$ at \rocq{oR3}, of total length \rocq{W3}:
+\begin{coq}
+Definition phi3 (beta : list F) (w : list F) : Vector.t G 5 :=
+  vec5 (com h1 gd (wslice w 0 m) (wat w oR3))
+       (com h1 gs1 (wslice w oB3 K) (wat w (oR3 + 1)))
+       (g ^ wat w (oR3 + 2))
+       (gop (g ^ dot beta (wslice w oB3 K) K) (h ^ wat w (oR3 + 2)))
+       (h1 ^ wat w (oR3 + 3)).
+
+Record ballot3 : Type := mk_ballot3 {
+  b3_cs : list (G * G);
+  b3_Cd : G; b3_Cb : G; b3_Cp : G; b3_CX : list G;
+  b3_lin : lin_proof;
+  b3_z : zero_argument }.
+
+Record chal3 : Type := mk_chal3 { c3_beta : list F; c3_y : F; c3_z : F; c3_c : F; c3_x : F }.
+
+Definition target3 (beta : list F) (bt : ballot3) : Vector.t G 5 :=
+  let cb := cbeta beta (b3_cs bt) in
+  vec5 (b3_Cd bt) (b3_Cb bt) (fst cb) (snd cb) (C0 (b3_Cd bt) (b3_Cb bt) (b3_Cp bt) (b3_CX bt)).
+\end{coq}
+These are the five rows of Step~5 and their targets: $C_\delta$ opened
+under \rocq{gd} as a commitment to $s$, $C_b$ opened as $b$, the link
+$C_\beta$, and $C_0 = h_1^{\rho^*}$. Compared with \rocq{ballot2}, there
+is no $C_s$, $C_X$ is a list of $L$ commitments under the one key, and
+there is one zero argument instead of three.
+
+\paragraph{The rows of the zero argument (Step 6)} The table of Step~6,
+with rows counted from $0$:
+\begin{coq}
+Definition zwt (z : F) (i : nat) : F := match i with 0 | 1 => z | _ => fpow z i end.
+Definition baseA (bt : ballot3) (i : nat) : G :=
+  match i with
+  | 0 => b3_Cb bt
+  | 1 => b3_Cp bt
+  | S (S t) => if Nat.ltb t L then nth t (b3_CX bt) gid else b3_Cb bt
+  end.
+Definition rowA (z : F) (bt : ballot3) (i : nat) : G := baseA bt i ^ zwt z i.
+Definition rowB (bt : ballot3) (i : nat) : G :=
+  match i with
+  | 0 => b3_Cd bt
+  | 1 => cneg h1 gs1 K
+  | S (S t) => gop (baseA bt i) (cneg h1 gs1 K)
+  end.
+Definition zA (z : F) (bt : ballot3) : list G := map (rowA z bt) (seq 0 R).
+Definition zB (bt : ballot3) : list G := map (rowB bt) (seq 0 R).
+\end{coq}
+Row $0$ is $C_b^{z}$ against $C_\delta$, and row $1$ is $C_p^{z}$
+against $\com(-\mathbf{1}; 0)$; they share the weight $z$ because only
+their sum vanishes. Row $2 + t$ for $t < L$ is $C_{X^{(t)}}^{z^{2+t}}$
+against $C_{X^{(t)}} \cdot \com(-\mathbf{1}; 0)$, and row $2 + L$ is
+$C_b^{z^{2+L}}$ against $C_b \cdot \com(-\mathbf{1}; 0)$. The weights
+raise commitments to powers, \rocq{rowA}; by the homomorphism
+$\com(v; \rho)^{w} = \com(wv; w\rho)$, so this is the left vector $w \cdot
+v$ of the table.
+
+\paragraph{The verifier and the challenges (Steps 7 and 9)}
+\begin{coq}
+Definition verify_ballot3 (ch : chal3) (bt : ballot3) : bool :=
+  (Nat.eqb (length (b3_cs bt)) K) && (Nat.eqb (length (b3_CX bt)) L) &&
+  lin_verify W3 (phi3 (c3_beta ch)) (target3 (c3_beta ch) bt) (c3_c ch) (b3_lin bt) &&
+  zero_verify h1 gs1 (zA (c3_z ch) bt) (zB bt) (c3_y ch) (c3_x ch) (b3_z bt).
+
+Definition vec_chal3 (tag : nat) (bt : ballot3) : list F :=
+  map (fun k => H (B3N tag :: B3N k :: items_base3 bt)) (seq 0 K).
+Definition challenges_of3 (bt : ballot3) : chal3 :=
+  mk_chal3 (vec_chal3 1 bt) (H (B3N 2 :: items_base3 bt)) (H (B3N 3 :: items_base3 bt))
+    (H (B3N 4 :: items_base3 bt ++ items_st3 (lin_a (b3_lin bt))))
+    (H (B3N 5 :: items_base3 bt ++ items_zero3 (b3_z bt))).
+\end{coq}
+The verifier is two length checks, one linear argument, and one zero
+argument. All five challenges are hashes of the ciphertexts and the
+commitments (\rocq{items\_base3}), plus the relevant announcement for
+$c$ and $x$. \rocq{nizk\_verify\_ballot3} is \rocq{verify\_ballot3
+(challenges\_of3 bt) bt}. \rocq{nizk\_encrypt\_ballot3} runs
+\rocq{encrypt\_ballot3} three times: first with zero challenges, then with
+the challenges of the first result, then with those of the second.
+
+\paragraph{The theorems (Step 8)}
+\begin{coq}
+Theorem ballot3_sound : forall (x : F) (bt : ballot3) (beta0 : list F) (c0 c1 : F)
+  (Y Z : list F),
+  h = g ^ x -> (1 <= L)%nat -> length gs1 = K -> natF_injective (3 * Nat.pow 2 L + 2) ->
+  length (b3_cs bt) = K -> length (b3_CX bt) = L -> length beta0 = K -> c0 <> c1 ->
+  lin_accepts3 beta0 bt c0 c1 ->
+  (forall k, (k < K)%nat -> exists beta', differ_at k beta' beta0 /\
+     lin_accepts3 beta' bt c0 c1) ->
+  NoDup Y -> length Y = K -> (forall y, In y Y -> y <> zero) ->
+  NoDup Z -> length Z = (L + 2)%nat -> (forall z, In z Z -> z <> zero) ->
+  (forall y z, In y Y -> In z Z -> zero_accepts h1 gs1 (zA z bt) (zB bt) y) ->
+  binding_break h1 gs1 \/
+  exists (pos : Vector.t nat m),
+    (forall i, (Vector.nth pos i <= 2 * Nat.pow 2 L)%nat) /\
+    forall i j : Fin.t m,
+      cdec x (nth (fin_idx i * m + fin_idx j) (b3_cs bt) cid) =
+      g ^ (if Nat.ltb (Vector.nth pos i) (Vector.nth pos j) then one else zero).
+\end{coq}
+The hypotheses mirror the challenges. Two linear transcripts at a base
+$\beta_0$, and at each of the $n$ one-coordinate variants of it, stand
+for the random $\beta$. The zero argument is accepted at every pair $(y,
+z)$ with $y$ from $n$ distinct non-zero values and $z$ from $L + 2$, the
+numbers of points that separate the coordinates and the rows
+(Section~\ref{sec:zero}). The $\gamma$ families of \rocq{ballot2\_sound}
+are gone, because the two field rows are gone, and so is the second key.
+The proof follows Step~8: \rocq{lin\_open3} extracts $s$ and $b$;
+\rocq{beta\_bits} ties every ciphertext to its bit; \rocq{zero\_open\_ref}
+opens $C_p$ and the $C_{X^{(t)}}$ at one reference pair, and
+\rocq{zero\_open\_at} shows every other pair opens the same vectors;
+\rocq{coeffs\_vanish} separates the rows by $z$, and \rocq{prod\_of\_star}
+and \rocq{bits\_of\_star} the coordinates by $y$; \rocq{C0\_open} gives the
+binary expansion; and \rocq{decode\_positions} finishes, as for the batched
+ballot. Completeness is \rocq{ballot3\_valid} and
+\rocq{nizk\_ballot3\_valid}, and zero-knowledge \rocq{ballot3\_zk}.
+\rocq{Backend/SchulzeSimpleTally.v} composes the ballot with the tally
+certificate in \rocq{schulze\_end\_to\_end3}.
 
 \section{The first ballot: position-anchored membership proofs}\label{sec:ballot1}
 

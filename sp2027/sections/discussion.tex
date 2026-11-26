@@ -15,9 +15,12 @@ soundness. Connecting the library to a formalisation of the random
 oracle model~\cite{10.1007/11617990_3} is future work. The mechanised
 hash input holds the ciphertexts, commitments, witness paths, and
 announcements, but not the election parameters $g$, $h$, and the
-commitment key. Our driver prefixes each ballot query with the voter's
-credential. A deployment must also prefix an election identifier and
-these parameters, as strong Fiat--Shamir asks~\cite{bpw12}.
+commitment key. The hash is a parameter of every non-interactive
+theorem, so the theorems hold for any fixed prefix of the hash input.
+Our driver prefixes each ballot query with the voter's credential. A
+deployment must also prefix the election parameters and an election
+identifier, as strong Fiat--Shamir asks~\cite{bpw12}; this changes no
+proof.
 
 \textbf{Limits of the certificate.} The certificate has three limits.
 Appendix~\ref{app:extensions} sketches how the tools of
