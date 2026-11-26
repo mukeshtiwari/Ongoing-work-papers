@@ -94,44 +94,17 @@ The elections of Section~\ref{sec:eval} run on OCaml.
 Table~\ref{tab:backends} runs a smaller program on other back ends, not
 the Schulze ballot but an approval ballot: seven encrypted votes, each
 with a proof that it encrypts $0$ or $1$.
-Peregrine compiles the ballot to C, which we build natively with GMP and,
+Peregrine~\cite{peregrine} compiles the ballot to C, which we build natively with GMP and,
 with emscripten and mini-gmp, for 64-bit WebAssembly (wasm64).
 CertiRocq~\cite{anand2017certicoq} compiles it to WebAssembly through
 its verified back end~\cite{meier2025certicoq}. The last path
 translates it to CakeML, whose compiler is
 verified~\cite{10.1145/2535838.2535841}.
 
-The integer arithmetic separates the back ends. OCaml, C, and wasm64
-replace Rocq's integers by GMP or mini-gmp, and this replacement is
-trusted. With it, the C program proves and verifies a 2048-bit ballot in
-44\,ms, and the wasm64 program in $0.27$\,s. Both accept the honest
-ballot and reject one whose ciphertext components are swapped, at 2048
-bits and over Ed25519. CertiRocq-Wasm and CakeML compute on Rocq's own
-integers, binary numbers built from constructors. CertiRocq's code also has no garbage
-collector, so the 2\,GB of linear memory is its limit. At 64 bits it
-builds and accepts a ballot, and at 128 bits it builds one but runs out
-of memory verifying it. At 256 bits only a single vote completes, and at
-2048 bits not even that. CakeML has a garbage
-collector and completes the 2048-bit ballot, but in 24 minutes, against
-37\,ms for OCaml.
-
-These measurements are about performance only. The C, wasm64,
-CertiRocq-Wasm, and CakeML programs over integers modulo a prime take
-the primality of the parameters as an assumption, and the 2048-bit C and
-wasm64 programs also the membership of $g$ and $h$ in the subgroup. The OCaml and
-Ed25519 programs assume none of this.
-CertiRocq-Wasm and CakeML ran on a copy of the library for Rocq 9.1, in
-which three more proofs are admitted. The CakeML programs print
-nothing, so we checked only that they finish.
 
 \begin{table}[h]
   \caption{Seven-candidate approval ballot on five back ends, on the
-  machine of Section~\ref{sec:eval}. Moduli in bits. Medians of five runs
-  (CakeML's ballot: one run; OCaml: random ballots, five runs of 30). C
-  and wasm64 include process start-up. Peregrine \texttt{13c701b} without
-  its LLVM back end, CertiRocq 0.9.1, CakeML v3479, emscripten 7.0.1,
-  Node 26.13.1. Memory: linear memory for CertiRocq-Wasm, peak resident
-  size otherwise (CakeML: 6000\,MB heap). OOM: out of linear memory.}
+  machine of Section~\ref{sec:eval}. OOM: out of linear memory.}
   \label{tab:backends}
   \centering\scriptsize\setlength{\tabcolsep}{3pt}
   \begin{tabular}{@{}lllrr@{}}

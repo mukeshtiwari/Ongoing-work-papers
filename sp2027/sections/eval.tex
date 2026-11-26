@@ -2,10 +2,10 @@
 Scripts in the artefact produce every number in this section. Every
 program but the parallel prover of Section~\ref{sec:eval:tally} uses
 one core, and we ran them on an Apple M5 Max laptop with 48\,GB of RAM. Sizes count $256$ bytes per group element and $32$
-per field element, in binary units ($1$\,KB $= 1024$ bytes). The extracted OCaml code is compiled with OCaml 5.4.1. It
+per field element. The extracted OCaml code is compiled with OCaml 5.4.1. It
 uses \texttt{zarith} (GMP) for big-number arithmetic and SHAKE-256 from
 HACL$^*$ as the Fiat--Shamir hash. Appendix~\ref{app:backends} runs a
-smaller approval ballot through Peregrine (C and CakeML) and CertiRocq
+smaller approval ballot through Peregrine~\cite{peregrine} (C and CakeML) and CertiRocq
 (WebAssembly).
 
 
