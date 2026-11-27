@@ -21,7 +21,7 @@ the witness, and the verifier's test $g^r = a \cdot h^c$.
 
 Completeness and special soundness are plain equations over the group
 and field, with no probability involved (\rocq{schnorr_completeness}
-and \rocq{special_soundness_berry}). Special soundness computes
+and \rocq{special_soundness}). Special soundness computes
 the witness as $(r - r')/(c - c')$. Zero-knowledge is
 different: it compares two probability distributions, so we need a way
 to represent them. Following~\cite{erwig2006functional}, a \rocq[distribution]{dist} is

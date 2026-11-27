@@ -20,7 +20,7 @@ Lemma simulator_completeness (g h : G) :
     true.
 Proof. (* proof terms omitted *) Qed.
 
-Lemma special_soundness_berry_gen (g h : G) :
+Lemma special_soundness_extractor (g h : G) :
   forall (a : G) (c1 r1 c2 r2 : F),
   c1 <> c2 ->
   accepting_conversation g h ([a]; [c1]; [r1]) = true ->

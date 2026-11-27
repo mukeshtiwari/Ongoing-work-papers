@@ -8,7 +8,7 @@ for a public statement $x$. The prover sends an announcement $a$, the
 verifier replies with a random challenge $c$, the prover sends a response
 $r$, and the verifier accepts or rejects the transcript $(a,c,r)$. The
 protocol is \rocq[\emph{complete}]{schnorr_completeness} if an honest prover is always accepted.
-It is \rocq[\emph{special sound}]{special_soundness_berry} if a witness can be computed from any two
+It is \rocq[\emph{special sound}]{special_soundness} if a witness can be computed from any two
 accepting transcripts $(a,c,r)$ and $(a,c',r')$ with $c \ne c'$, so a
 prover who can answer two challenges must know a witness. It is
 \rocq[\emph{special honest-verifier zero-knowledge}]{special_honest_verifier_zkp_perm} (SHVZK) if, for every
